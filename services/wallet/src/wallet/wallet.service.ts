@@ -16,7 +16,6 @@ import {
 } from '@panda-ng/utils';
 import type { PaginatedResult } from '@panda-ng/utils';
 import { TransactionType } from '@panda-ng/types';
-import type { WalletLedgerEntry } from '@prisma/client';
 
 @Injectable()
 export class WalletService {
@@ -46,13 +45,18 @@ export class WalletService {
       select: { balanceInCents: true, bonusBalanceInCents: true, currency: true },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    return wallet;
+    // Serialize BigInt to string — JSON.stringify throws on native BigInt
+    return {
+      balanceInCents: wallet.balanceInCents.toString(),
+      bonusBalanceInCents: wallet.bonusBalanceInCents.toString(),
+      currency: wallet.currency,
+    };
   }
 
   async getTransactions(
     userId: string,
     pagination: { page: number; limit: number },
-  ): Promise<PaginatedResult<WalletLedgerEntry>> {
+  ): Promise<PaginatedResult<Record<string, unknown>>> {
     const normalized = normalizePagination(pagination);
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -70,7 +74,15 @@ export class WalletService {
       this.prisma.walletLedgerEntry.count({ where: { walletId: wallet.id } }),
     ]);
 
-    return buildPaginatedResult(entries, total, normalized);
+    // Serialize BigInt fields before JSON response
+    const serialized = entries.map((e) => ({
+      ...e,
+      amountInCents: e.amountInCents.toString(),
+      balanceBeforeInCents: e.balanceBeforeInCents.toString(),
+      balanceAfterInCents: e.balanceAfterInCents.toString(),
+    }));
+
+    return buildPaginatedResult(serialized, total, normalized);
   }
 
   async credit(
@@ -201,62 +213,78 @@ export class WalletService {
       );
     }
 
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-      select: { balanceInCents: true },
-    });
-    if (!wallet) throw new NotFoundException('Wallet not found');
-
-    if (wallet.balanceInCents < amountInCents) {
-      throw new BadRequestException('Insufficient funds for withdrawal');
-    }
-
-    // Check daily withdrawal limit
     const todayStart = startOfDay(new Date());
 
-    const dailyWithdrawals = await this.prisma.withdrawal.aggregate({
-      where: {
-        userId,
-        createdAt: { gte: todayStart },
-        status: { notIn: ['REJECTED', 'FAILED'] },
-      },
-      _sum: { amountInCents: true },
-    });
+    // Single atomic transaction: balance debit + ledger entry + withdrawal record
+    return this.prisma.$transaction(async (tx) => {
+      const wallet = await tx.wallet.findUnique({
+        where: { userId },
+        select: { id: true, balanceInCents: true, isLocked: true },
+      });
+      if (!wallet) throw new NotFoundException('Wallet not found');
+      if (wallet.isLocked) throw new BadRequestException('Wallet is temporarily locked');
 
-    const todayTotal = dailyWithdrawals._sum.amountInCents ?? 0n;
-    if (todayTotal + amountInCents > this.MAX_DAILY_WITHDRAWAL_CENTS) {
-      throw new BadRequestException('Daily withdrawal limit exceeded');
-    }
+      if (wallet.balanceInCents < amountInCents) {
+        throw new BadRequestException('Insufficient funds for withdrawal');
+      }
 
-    // Reserve balance before creating withdrawal record
-    await this.debit(
-      userId,
-      amountInCents,
-      TransactionType.WITHDRAWAL,
-      undefined,
-      'Withdrawal request reserved',
-    );
-
-    const withdrawal = await this.prisma.withdrawal.create({
-      data: {
-        userId,
-        amountInCents,
-        currency: dto.currency ?? 'PHP',
-        provider: dto.provider,
-        accountDetails: {
-          bankAccountNumber: dto.bankAccountNumber,
-          bankCode: dto.bankCode,
-          eWalletNumber: dto.eWalletNumber,
-          accountName: dto.accountName,
+      // Check daily withdrawal limit inside the transaction
+      const dailyWithdrawals = await tx.withdrawal.aggregate({
+        where: {
+          userId,
+          createdAt: { gte: todayStart },
+          status: { notIn: ['REJECTED', 'FAILED'] },
         },
-        status: 'PENDING',
-      },
-    });
+        _sum: { amountInCents: true },
+      });
 
-    this.logger.log(
-      `Withdrawal requested: ${withdrawal.id} for user ${userId} - ${amountInCents} cents`,
-    );
-    return withdrawal;
+      const todayTotal = dailyWithdrawals._sum.amountInCents ?? 0n;
+      if (todayTotal + amountInCents > this.MAX_DAILY_WITHDRAWAL_CENTS) {
+        throw new BadRequestException('Daily withdrawal limit exceeded');
+      }
+
+      const balanceBefore = wallet.balanceInCents;
+      const balanceAfter = balanceBefore - amountInCents;
+
+      // Debit the wallet
+      await tx.wallet.update({
+        where: { userId },
+        data: { balanceInCents: balanceAfter },
+      });
+
+      // Immutable ledger entry
+      await this.ledger.create(tx, {
+        walletId: wallet.id,
+        type: TransactionType.WITHDRAWAL,
+        amountInCents,
+        balanceBeforeInCents: balanceBefore,
+        balanceAfterInCents: balanceAfter,
+        description: 'Withdrawal request reserved',
+      });
+
+      // Withdrawal record — same transaction, fully atomic with the debit
+      const withdrawal = await tx.withdrawal.create({
+        data: {
+          userId,
+          amountInCents,
+          currency: dto.currency ?? 'PHP',
+          provider: dto.provider,
+          accountDetails: {
+            bankAccountNumber: dto.bankAccountNumber,
+            bankCode: dto.bankCode,
+            eWalletNumber: dto.eWalletNumber,
+            accountName: dto.accountName,
+          },
+          status: 'PENDING',
+        },
+      });
+
+      this.logger.log(
+        `Withdrawal requested: ${withdrawal.id} for user ${userId} - ${amountInCents} cents`,
+      );
+
+      return { ...withdrawal, amountInCents: withdrawal.amountInCents.toString() };
+    });
   }
 
   async getWithdrawal(userId: string, withdrawalId: string) {

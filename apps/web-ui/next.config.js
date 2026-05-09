@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+  // Enable standalone output for minimal production Docker images
+  output: 'standalone',
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**.panda-ng.com' },
@@ -20,7 +21,9 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              // 'unsafe-eval' and 'unsafe-inline' removed for production security.
+              // Use a nonce-based CSP middleware (see Next.js docs) to allow inline scripts.
+              "script-src 'self'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https:",

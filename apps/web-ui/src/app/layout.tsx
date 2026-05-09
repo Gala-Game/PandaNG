@@ -20,8 +20,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Do NOT restrict user scaling — required for accessibility (WCAG 1.4.4 Resize Text)
   themeColor: '#00FFFF',
 };
 

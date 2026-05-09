@@ -2,13 +2,17 @@
 // Never use floating point for money calculations.
 
 export function centsToDisplay(amountInCents: bigint, currency = 'PHP'): string {
-  const amount = Number(amountInCents) / 100;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  // Use BigInt arithmetic to avoid precision loss from Number() cast.
+  // Number.MAX_SAFE_INTEGER ≈ 90.07 trillion cents; anything above loses precision silently.
+  const negative = amountInCents < 0n;
+  const abs = negative ? -amountInCents : amountInCents;
+  const majorUnits = abs / 100n;
+  const minorUnits = abs % 100n;
+  // Intl.NumberFormat accepts BigInt in Node 19+ / modern browsers
+  const majorFormatted = Intl.NumberFormat('en-US').format(majorUnits);
+  const minorStr = minorUnits.toString().padStart(2, '0');
+  const symbol = currency === 'PHP' ? '₱' : `${currency} `;
+  return `${negative ? '-' : ''}${symbol}${majorFormatted}.${minorStr}`;
 }
 
 export function formatCurrency(amountInCents: bigint, currency = 'PHP'): string {
@@ -20,6 +24,10 @@ export function toCents(amount: number): bigint {
   return BigInt(Math.round(amount * 100));
 }
 
+/**
+ * Convert cents to a floating-point number for approximate display only.
+ * Do NOT use the result for financial calculations — it loses precision above ~900 trillion cents.
+ */
 export function fromCents(amountInCents: bigint): number {
   return Number(amountInCents) / 100;
 }
@@ -53,6 +61,7 @@ export function deserializeBigInt(value: string): bigint {
 }
 
 export function formatCompact(amountInCents: bigint): string {
+  // Compact display is approximate by nature; safe to use Number here
   const amount = Number(amountInCents) / 100;
   if (amount >= 1_000_000) return `₱${(amount / 1_000_000).toFixed(2)}M`;
   if (amount >= 1_000) return `₱${(amount / 1_000).toFixed(1)}K`;

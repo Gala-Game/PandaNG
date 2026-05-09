@@ -12,7 +12,11 @@ import { SocketEvents } from '@panda-ng/types';
 import type { JackpotTickPayload, JackpotWinPayload } from '@panda-ng/types';
 
 @WebSocketGateway({
-  cors: { origin: '*', credentials: true },
+  cors: {
+    // Restrict to allowed origins from environment — never use wildcard with credentials
+    origin: process.env['ALLOWED_ORIGINS']?.split(',').map((o) => o.trim()) ?? ['http://localhost:3000'],
+    credentials: true,
+  },
   namespace: '/jackpot',
   transports: ['websocket', 'polling'],
 })

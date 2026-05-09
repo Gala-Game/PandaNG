@@ -50,7 +50,10 @@ export function normalizePagination(
   partial: Partial<PaginationDto>,
   maxLimit = 100,
 ): PaginationDto {
-  const page = Math.max(1, partial.page ?? 1);
-  const limit = Math.min(maxLimit, Math.max(1, partial.limit ?? 20));
+  // Guard against NaN: Math.max(1, NaN) === NaN which would break Prisma skip/take
+  const rawPage = partial.page;
+  const rawLimit = partial.limit;
+  const page = Math.max(1, Number.isFinite(rawPage) ? (rawPage as number) : 1);
+  const limit = Math.min(maxLimit, Math.max(1, Number.isFinite(rawLimit) ? (rawLimit as number) : 20));
   return { page, limit, sortBy: partial.sortBy, sortOrder: partial.sortOrder ?? 'desc' };
 }

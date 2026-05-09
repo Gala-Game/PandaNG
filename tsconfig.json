@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/types" },
+    { "path": "./packages/config" },
+    { "path": "./packages/utils" },
+    { "path": "./services/auth" },
+    { "path": "./services/wallet" },
+    { "path": "./services/jackpot" },
+    { "path": "./services/realtime" },
+    { "path": "./services/rewards" },
+    { "path": "./services/notifications" },
+    { "path": "./services/fraud" },
+    { "path": "./services/admin-api" },
+    { "path": "./apps/web-ui" }
+  ]
+}

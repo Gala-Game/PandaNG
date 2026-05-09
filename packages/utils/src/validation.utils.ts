@@ -43,7 +43,7 @@ export function isValidAmount(amountInCents: number): boolean {
   return (
     Number.isInteger(amountInCents) &&
     amountInCents > 0 &&
-    amountInCents <= 100_000_000_00 // max 1B PHP
+    amountInCents <= 100_000_000_00 // max 100M PHP (10,000,000,000 cents)
   );
 }
 

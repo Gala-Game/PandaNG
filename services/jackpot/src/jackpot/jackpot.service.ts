@@ -18,16 +18,27 @@ export class JackpotService {
   ) {}
 
   async getAllJackpots() {
-    return this.prisma.jackpot.findMany({
+    const jackpots = await this.prisma.jackpot.findMany({
       where: { isActive: true },
       orderBy: { tier: 'asc' },
     });
+    // Serialize BigInt fields to strings for safe JSON response
+    return jackpots.map((j) => ({
+      ...j,
+      currentAmountInCents: j.currentAmountInCents.toString(),
+      seedAmountInCents: j.seedAmountInCents.toString(),
+    }));
   }
 
   async getJackpot(id: string) {
     const jackpot = await this.prisma.jackpot.findUnique({ where: { id } });
     if (!jackpot) throw new NotFoundException(`Jackpot ${id} not found`);
-    return jackpot;
+    // Serialize BigInt fields to strings for safe JSON response
+    return {
+      ...jackpot,
+      currentAmountInCents: jackpot.currentAmountInCents.toString(),
+      seedAmountInCents: jackpot.seedAmountInCents.toString(),
+    };
   }
 
   async contributeToJackpot(jackpotId: string, dto: ContributeDto) {

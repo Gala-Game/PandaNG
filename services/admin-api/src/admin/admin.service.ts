@@ -48,7 +48,15 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
 
-    return buildPaginatedResult(users, total, normalized);
+    // Serialize wallet BigInt fields before returning
+    const serialized = users.map((u) => ({
+      ...u,
+      wallet: u.wallet
+        ? { ...u.wallet, balanceInCents: u.wallet.balanceInCents.toString() }
+        : null,
+    }));
+
+    return buildPaginatedResult(serialized, total, normalized);
   }
 
   async getUserDetail(userId: string) {
@@ -62,7 +70,22 @@ export class AdminService {
       },
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+
+    // Serialize wallet BigInt fields before returning
+    return {
+      ...user,
+      wallet: user.wallet
+        ? {
+            ...user.wallet,
+            balanceInCents: user.wallet.balanceInCents.toString(),
+            bonusBalanceInCents: user.wallet.bonusBalanceInCents.toString(),
+            totalDepositedInCents: user.wallet.totalDepositedInCents.toString(),
+            totalWithdrawnInCents: user.wallet.totalWithdrawnInCents.toString(),
+            totalWageredInCents: user.wallet.totalWageredInCents.toString(),
+            totalWonInCents: user.wallet.totalWonInCents.toString(),
+          }
+        : null,
+    };
   }
 
   async banUser(userId: string, reason: string) {

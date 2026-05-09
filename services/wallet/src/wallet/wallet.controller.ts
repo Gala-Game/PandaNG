@@ -44,8 +44,12 @@ export class WalletController {
     @Query('limit') limit?: string,
   ) {
     const pageNum = parseInt(page ?? '1', 10);
-    const limitNum = Math.min(parseInt(limit ?? '20', 10), 100);
-    return this.walletService.getTransactions(user.sub, { page: pageNum, limit: limitNum });
+    const limitNum = parseInt(limit ?? '20', 10);
+    // Guard against NaN (e.g. ?page=foo): normalizePagination handles it too, but be explicit
+    return this.walletService.getTransactions(user.sub, {
+      page: Number.isFinite(pageNum) ? pageNum : 1,
+      limit: Number.isFinite(limitNum) ? Math.min(limitNum, 100) : 20,
+    });
   }
 
   @Post('deposit/initiate')
