@@ -17,6 +17,16 @@ import type { AuthTokenPair } from '@panda-ng/types';
 
 const BCRYPT_ROUNDS = 12;
 
+/** Parse JWT expiry strings like '15m', '7d', '3600s', '1h' → seconds */
+function parseExpiryToSeconds(expiry: string): number {
+  const num = parseInt(expiry, 10);
+  if (expiry.endsWith('s')) return num;
+  if (expiry.endsWith('m')) return num * 60;
+  if (expiry.endsWith('h')) return num * 3600;
+  if (expiry.endsWith('d')) return num * 86400;
+  return num; // assume raw seconds if no unit
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -292,9 +302,7 @@ export class AuthService {
       }),
     ]);
 
-    const expiresInSeconds = accessExpiresIn.endsWith('m')
-      ? parseInt(accessExpiresIn, 10) * 60
-      : parseInt(accessExpiresIn, 10);
+    const expiresInSeconds = parseExpiryToSeconds(accessExpiresIn);
 
     return { accessToken, refreshToken, expiresIn: expiresInSeconds };
   }

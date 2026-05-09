@@ -6,7 +6,7 @@ export class CreateWithdrawalDto {
   @ApiProperty({ description: 'Amount in cents (min 100 PHP = 10000 cents)', example: 50000 })
   @IsInt()
   @Min(10000)
-  @Max(100_000_00)
+  @Max(10_000_000) // Max 100,000 PHP (matches MAX_DAILY_WITHDRAWAL_CENTS)
   amountInCents!: number;
 
   @ApiProperty({ enum: PaymentProvider })

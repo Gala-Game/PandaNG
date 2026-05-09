@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { CreateDepositDto } from './dto/deposit.dto';
 import { CreateWithdrawalDto } from './dto/withdrawal.dto';
-import { generateSecureToken } from '@panda-ng/utils';
+import { generateSecureToken, startOfDay } from '@panda-ng/utils';
 import {
   buildPaginatedResult,
   normalizePagination,
@@ -212,13 +212,12 @@ export class WalletService {
     }
 
     // Check daily withdrawal limit
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const todayStart = startOfDay(new Date());
 
     const dailyWithdrawals = await this.prisma.withdrawal.aggregate({
       where: {
         userId,
-        createdAt: { gte: today },
+        createdAt: { gte: todayStart },
         status: { notIn: ['REJECTED', 'FAILED'] },
       },
       _sum: { amountInCents: true },
