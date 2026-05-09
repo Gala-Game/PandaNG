@@ -37,7 +37,8 @@ Enterprise architecture blueprint for a **web-first, mobile-optimized, cyberpunk
 ## 3) Realtime Jackpot + Multiplayer Network
 
 - Distributed Socket.IO nodes (regional shards)
-- Redis Pub/Sub fanout for jackpot increments, winner feed, clan/tournament updates
+- Redis Pub/Sub fanout for jackpot notifications (winner feed, clan/tournament updates), not as the sole source of truth
+- Authoritative jackpot counters and balances are persisted in a durable store (PostgreSQL/ledger), with snapshot + client/server resync on reconnect or drift detection
 - Presence service for online state and lobby social feed
 - Event synchronization for:
   - Multiplayer Jackpot Arena
