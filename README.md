@@ -166,7 +166,7 @@ Enterprise architecture blueprint for a **web-first, mobile-optimized, cyberpunk
 
 ## 10) Monorepo/Org Target Repositories
 
-The following repository names are intentionally aligned with the requested `gala-games-*` convention.
+The following repository names are intentionally aligned with the `gala-games-*` convention.
 
 - gala-games-ui
 - gala-games-backend
