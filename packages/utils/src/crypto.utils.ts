@@ -5,9 +5,19 @@ export function generateSecureToken(length = 32): string {
 }
 
 export function generateUUID(): string {
-  return randomBytes(16)
-    .toString('hex')
-    .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-4$3-a$4-$5');
+  const bytes = randomBytes(16);
+  // Set version 4 (bits 12-15 of time_hi_and_version)
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  // Set variant bits (RFC 4122: 10xxxxxx)
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-');
 }
 
 export function sha256(input: string): string {
@@ -30,7 +40,7 @@ export function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
   for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ (b.charCodeAt(i) ?? 0);
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return result === 0;
 }

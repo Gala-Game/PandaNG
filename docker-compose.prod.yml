@@ -56,7 +56,16 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --requirepass-file /run/secrets/redis_password
+    # Read password from Docker secret at startup via shell entrypoint
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        exec redis-server \
+          --appendonly yes \
+          --maxmemory 1gb \
+          --maxmemory-policy allkeys-lru \
+          --requirepass "$$(cat /run/secrets/redis_password)"
     secrets:
       - redis_password
     volumes:
