@@ -1,4 +1,4 @@
-# GALA Games — NG Panda Games
+# GALA Games - NG Panda Games
 
 Enterprise architecture blueprint for a **web-first, mobile-optimized, cyberpunk panda casino ecosystem** with real-time jackpots, financial-grade backend services, and DevSecOps hardening.
 
@@ -165,6 +165,8 @@ Enterprise architecture blueprint for a **web-first, mobile-optimized, cyberpunk
 - AIRecommendations
 
 ## 10) Monorepo/Org Target Repositories
+
+The following repository names are intentionally aligned with the requested `gala-games-*` convention.
 
 - gala-games-ui
 - gala-games-backend
