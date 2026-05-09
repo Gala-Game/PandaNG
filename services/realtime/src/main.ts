@@ -7,7 +7,7 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(helmet());
 
   const corsOrigins = (process.env['CORS_ORIGINS'] ?? 'http://localhost:3000')
     .split(',')

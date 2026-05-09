@@ -84,7 +84,7 @@ export class FraudService {
         select: { userId: true },
       });
       const uniqueUsers = new Set(deviceHistory.map((d) => d.userId));
-      if (uniqueUsers.size > 1 && !uniqueUsers.has(dto.userId)) {
+      if (uniqueUsers.size >= 2) {
         score += 50;
         flags.push('SHARED_DEVICE');
       }
