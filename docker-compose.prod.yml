@@ -1,0 +1,418 @@
+version: '3.9'
+
+networks:
+  panda-ng-network:
+    driver: overlay
+    attachable: true
+
+secrets:
+  db_password:
+    external: true
+  redis_password:
+    external: true
+  jwt_secret:
+    external: true
+  jwt_refresh_secret:
+    external: true
+  admin_api_key:
+    external: true
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: pandang
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: pandang_db
+    secrets:
+      - db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pandang -d pandang_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+        reservations:
+          memory: 512m
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    networks:
+      - panda-ng-network
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --requirepass-file /run/secrets/redis_password
+    secrets:
+      - redis_password
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    networks:
+      - panda-ng-network
+
+  # ── Services ────────────────────────────────────────────────────────────────
+
+  auth:
+    image: ghcr.io/gala-game/pandang/auth:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+    secrets:
+      - jwt_secret
+      - jwt_refresh_secret
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  wallet:
+    image: ghcr.io/gala-game/pandang/wallet:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3002
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  jackpot:
+    image: ghcr.io/gala-game/pandang/jackpot:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3003
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3003/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  realtime:
+    image: ghcr.io/gala-game/pandang/realtime:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3004
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3004/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  rewards:
+    image: ghcr.io/gala-game/pandang/rewards:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3005
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3005/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  notifications:
+    image: ghcr.io/gala-game/pandang/notifications:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3006
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3006/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  fraud:
+    image: ghcr.io/gala-game/pandang/fraud:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3007
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3007/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 768m
+          cpus: '0.75'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  admin-api:
+    image: ghcr.io/gala-game/pandang/admin-api:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3008
+      NODE_ENV: production
+    secrets:
+      - admin_api_key
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3008/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  # ── Apps ────────────────────────────────────────────────────────────────────
+
+  web-ui:
+    image: ghcr.io/gala-game/pandang/web-ui:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 15s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+  admin:
+    image: ghcr.io/gala-game/pandang/admin:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      PORT: 3009
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3009/api/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 15s
+        failure_action: rollback
+    networks:
+      - panda-ng-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
