@@ -1,0 +1,940 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_DIRECT_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  PLAYER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_KYC
+  DEACTIVATED
+}
+
+enum KYCStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+  REQUIRES_RESUBMISSION
+}
+
+enum VIPLevel {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+  PANDA_ELITE
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  BET
+  WIN
+  BONUS
+  REFUND
+  CASHBACK
+  TRANSFER
+  JACKPOT_WIN
+  MISSION_REWARD
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+enum CurrencyCode {
+  PHP
+  USD
+  USDT
+}
+
+enum GameType {
+  SLOTS
+  MINI_GAME
+  SCRATCH_CARD
+  ROULETTE
+  CRASH
+  PANDA_SPIN
+  BAMBOO_BLAST
+  DRAGON_DICE
+}
+
+enum GameSessionStatus {
+  STARTED
+  COMPLETED
+  ABANDONED
+  DISPUTED
+}
+
+enum PaymentProvider {
+  GCASH
+  MAYA
+  GRABPAY
+  PAYPAL
+  STRIPE
+  BANK_TRANSFER
+}
+
+enum PaymentMethod {
+  E_WALLET
+  BANK_TRANSFER
+  CREDIT_CARD
+  DEBIT_CARD
+  CRYPTO
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum JackpotTier {
+  MINI
+  MINOR
+  MAJOR
+  GRAND
+}
+
+enum FraudRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ClanRole {
+  MEMBER
+  OFFICER
+  CO_LEADER
+  LEADER
+}
+
+enum ClanWarStatus {
+  PREPARING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TournamentStatus {
+  UPCOMING
+  REGISTRATION
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  JACKPOT_WIN
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_REJECTED
+  DEPOSIT_CONFIRMED
+  MISSION_COMPLETE
+  ACHIEVEMENT_UNLOCK
+  VIP_UPGRADE
+  PROMO_AVAILABLE
+  CLAN_INVITE
+  CLAN_WAR_START
+  CLAN_WAR_END
+  KYC_REQUIRED
+  KYC_APPROVED
+  KYC_REJECTED
+  SECURITY_ALERT
+  SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  EMAIL
+  SMS
+}
+
+enum KYCDocumentType {
+  NATIONAL_ID
+  PASSPORT
+  DRIVERS_LICENSE
+  VOTERS_ID
+  SSS_ID
+  PHILHEALTH_ID
+}
+
+enum KYCTier {
+  UNVERIFIED
+  BASIC
+  ENHANCED
+  FULL
+}
+
+enum MissionType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  SPECIAL
+  TUTORIAL
+  ACHIEVEMENT
+}
+
+enum RewardType {
+  CASH
+  BONUS_CASH
+  FREE_SPINS
+  XP
+  ITEM
+}
+
+enum MissionStatus {
+  LOCKED
+  AVAILABLE
+  IN_PROGRESS
+  COMPLETED
+  CLAIMED
+  EXPIRED
+}
+
+enum LeaderboardType {
+  DAILY_WINS
+  WEEKLY_WINS
+  MONTHLY_WINS
+  ALL_TIME_WINS
+  JACKPOT_WINS
+  TOURNAMENT
+}
+
+enum LeaderboardPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ALL_TIME
+}
+
+enum ActorType {
+  ADMIN
+  SYSTEM
+  PLAYER
+}
+
+enum PromotionType {
+  DEPOSIT_BONUS
+  FREE_SPINS
+  CASHBACK
+  RELOAD_BONUS
+  REFERRAL_BONUS
+  VIP_REWARD
+}
+
+// ─── MODELS ───────────────────────────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  username       String     @unique
+  passwordHash   String
+  role           UserRole   @default(PLAYER)
+  status         UserStatus @default(ACTIVE)
+  kycStatus      KYCStatus  @default(NOT_SUBMITTED)
+  vipLevel       VIPLevel   @default(BRONZE)
+  vipXp          BigInt     @default(0)
+  phoneNumber    String?    @unique
+  country        String?
+  timezone       String     @default("Asia/Manila")
+  avatarUrl      String?
+  referralCode   String?    @unique
+  referredById   String?
+  referredBy     User?      @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals      User[]     @relation("Referrals")
+  lastLoginAt    DateTime?
+  loginCount     Int        @default(0)
+  isTwoFAEnabled Boolean    @default(false)
+  twoFASecret    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  // Relations
+  sessions                 Session[]
+  wallet                   Wallet?
+  gameSessions             GameSession[]
+  jackpotWins              JackpotWin[]
+  payments                 Payment[]
+  withdrawals              Withdrawal[]
+  fraudSignals             FraudSignal[]
+  deviceFingerprints       DeviceFingerprint[]
+  auditLogsAsActor         AuditLog[]                @relation("AuditActor")
+  kycProfile               KYCProfile?
+  notifications            Notification[]
+  pushTokens               PushToken[]
+  clanMembership           ClanMember?
+  ownedClan                Clan?                     @relation("ClanOwner")
+  tournamentParticipations TournamentParticipant[]
+  userMissions             UserMission[]
+  userAchievements         UserAchievement[]
+  userBattlePass           UserBattlePass[]
+  userPromotions           UserPromotion[]
+  leaderboardEntries       Leaderboard[]
+  analyticsEvents          AnalyticsEvent[]
+
+  @@index([email])
+  @@index([username])
+  @@index([status])
+  @@index([kycStatus])
+  @@index([vipLevel])
+  @@index([referredById])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  deviceId  String?
+  ipAddress String?
+  userAgent String?
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Wallet {
+  id                    String       @id @default(cuid())
+  userId                String       @unique
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceInCents        BigInt       @default(0)
+  bonusBalanceInCents   BigInt       @default(0)
+  currency              CurrencyCode @default(PHP)
+  totalDepositedInCents BigInt       @default(0)
+  totalWonInCents       BigInt       @default(0)
+  totalWageredInCents   BigInt       @default(0)
+  isLocked              Boolean      @default(false)
+  lockReason            String?
+  updatedAt             DateTime     @updatedAt
+  createdAt             DateTime     @default(now())
+
+  // Relations
+  ledgerEntries WalletLedgerEntry[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+model WalletLedgerEntry {
+  id                   String          @id @default(cuid())
+  walletId             String
+  wallet               Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  type                 TransactionType
+  amountInCents        BigInt
+  balanceBeforeInCents BigInt
+  balanceAfterInCents  BigInt
+  reference            String?
+  description          String?
+  metadata             Json?
+  gameSessionId        String?
+  paymentId            String?
+  createdAt            DateTime        @default(now())
+
+  // NOTE: No updatedAt — ledger entries are IMMUTABLE
+
+  @@index([walletId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([reference])
+  @@map("wallet_ledger_entries")
+}
+
+model Jackpot {
+  id                   String      @id @default(cuid())
+  tier                 JackpotTier @unique
+  name                 String
+  seedAmountInCents    BigInt
+  currentAmountInCents BigInt
+  contributionRate     Decimal     @db.Decimal(5, 4) // e.g. 0.0050 = 0.50%
+  maxWinMultiplier     Decimal     @db.Decimal(10, 2)
+  isActive             Boolean     @default(true)
+  lastWonAt            DateTime?
+  lastWonByUserId      String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  wins JackpotWin[]
+
+  @@index([isActive])
+  @@map("jackpots")
+}
+
+model JackpotWin {
+  id            String    @id @default(cuid())
+  jackpotId     String
+  jackpot       Jackpot   @relation(fields: [jackpotId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  amountInCents BigInt
+  gameSessionId String
+  confirmedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([jackpotId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("jackpot_wins")
+}
+
+model GameSession {
+  id               String            @id @default(cuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  gameType         GameType
+  betAmountInCents BigInt
+  winAmountInCents BigInt            @default(0)
+  rtpProfileId     String
+  rtpProfile       RTPProfile        @relation(fields: [rtpProfileId], references: [id])
+  seed             String
+  serverSeed       String
+  serverSeedHash   String // Revealed after session ends (provably fair)
+  clientSeed       String
+  nonce            Int               @default(0)
+  status           GameSessionStatus @default(STARTED)
+  metadata         Json?
+  startedAt        DateTime          @default(now())
+  endedAt          DateTime?
+
+  @@index([userId])
+  @@index([gameType])
+  @@index([status])
+  @@index([startedAt])
+  @@map("game_sessions")
+}
+
+model RTPProfile {
+  id            String   @id @default(cuid())
+  gameType      GameType
+  name          String
+  rtp           Decimal  @db.Decimal(5, 4)
+  variance      String // 'low' | 'medium' | 'high'
+  minBetInCents BigInt
+  maxBetInCents BigInt
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  gameSessions GameSession[]
+
+  @@unique([gameType, name])
+  @@index([gameType, isActive])
+  @@map("rtp_profiles")
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  provider          PaymentProvider
+  method            PaymentMethod
+  status            PaymentStatus   @default(INITIATED)
+  amountInCents     BigInt
+  currency          CurrencyCode    @default(PHP)
+  reference         String          @unique
+  providerReference String?
+  checkoutUrl       String?
+  metadata          Json?
+  webhookReceivedAt DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([reference])
+  @@index([providerReference])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+model Withdrawal {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  amountInCents   BigInt
+  currency        CurrencyCode     @default(PHP)
+  status          WithdrawalStatus @default(PENDING)
+  provider        PaymentProvider
+  accountDetails  Json // Bank account / e-wallet number (encrypted at rest)
+  fraudScore      Decimal?         @db.Decimal(5, 2)
+  adminReviewedBy String?
+  adminNotes      String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  processedAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("withdrawals")
+}
+
+model FraudSignal {
+  id         String         @id @default(cuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id])
+  signalType String
+  severity   FraudRiskLevel
+  data       Json
+  isResolved Boolean        @default(false)
+  resolvedBy String?
+  resolvedAt DateTime?
+  notes      String?
+  createdAt  DateTime       @default(now())
+
+  @@index([userId])
+  @@index([severity])
+  @@index([isResolved])
+  @@index([createdAt])
+  @@map("fraud_signals")
+}
+
+model DeviceFingerprint {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  fingerprint String
+  deviceType  String?
+  os          String?
+  browser     String?
+  ipAddress   String?
+  isTrusted   Boolean  @default(false)
+  seenCount   Int      @default(1)
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
+
+  @@unique([userId, fingerprint])
+  @@index([fingerprint])
+  @@index([ipAddress])
+  @@map("device_fingerprints")
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorId    String
+  actor      User      @relation("AuditActor", fields: [actorId], references: [id])
+  actorType  ActorType
+  action     String
+  resource   String
+  resourceId String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([actorId])
+  @@index([resource, resourceId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Clan {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  level       Int      @default(1)
+  xp          BigInt   @default(0)
+  ownerId     String   @unique
+  owner       User     @relation("ClanOwner", fields: [ownerId], references: [id])
+  memberLimit Int      @default(50)
+  isPublic    Boolean  @default(true)
+  bannerUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members ClanMember[]
+  wars1   ClanWar[]    @relation("ClanWar1")
+  wars2   ClanWar[]    @relation("ClanWar2")
+
+  @@index([slug])
+  @@index([level])
+  @@index([isPublic])
+  @@map("clans")
+}
+
+model ClanMember {
+  id                       String   @id @default(cuid())
+  clanId                   String
+  clan                     Clan     @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  userId                   String   @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                     ClanRole @default(MEMBER)
+  weeklyContributionInCents BigInt  @default(0)
+  totalContributionInCents  BigInt  @default(0)
+  joinedAt                 DateTime @default(now())
+
+  @@index([clanId])
+  @@map("clan_members")
+}
+
+model ClanWar {
+  id         String        @id @default(cuid())
+  clan1Id    String
+  clan1      Clan          @relation("ClanWar1", fields: [clan1Id], references: [id])
+  clan2Id    String
+  clan2      Clan          @relation("ClanWar2", fields: [clan2Id], references: [id])
+  status     ClanWarStatus @default(PREPARING)
+  clan1Score BigInt        @default(0)
+  clan2Score BigInt        @default(0)
+  startedAt  DateTime
+  endsAt     DateTime
+  winnerId   String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([clan1Id])
+  @@index([clan2Id])
+  @@index([status])
+  @@map("clan_wars")
+}
+
+model Tournament {
+  id                String           @id @default(cuid())
+  name              String
+  description       String?
+  gameType          GameType
+  status            TournamentStatus @default(UPCOMING)
+  prizePoolInCents  BigInt
+  entryFeeInCents   BigInt           @default(0)
+  maxParticipants   Int
+  startedAt         DateTime
+  endsAt            DateTime
+  prizeDistribution Json // e.g. [{"rank": 1, "pct": 50}, {"rank": 2, "pct": 30}]
+  bannerUrl         String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  participants TournamentParticipant[]
+
+  @@index([status])
+  @@index([gameType])
+  @@index([startedAt])
+  @@map("tournaments")
+}
+
+model TournamentParticipant {
+  id              String     @id @default(cuid())
+  tournamentId    String
+  tournament      Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+  score           BigInt     @default(0)
+  rank            Int?
+  prizeWonInCents BigInt?
+  joinedAt        DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, score])
+  @@map("tournament_participants")
+}
+
+model Mission {
+  id           String      @id @default(cuid())
+  name         String
+  description  String
+  type         MissionType
+  requirements Json // e.g. {"action": "bet", "count": 5, "gameType": "SLOTS"}
+  rewardType   RewardType
+  rewardAmount BigInt
+  rewardItemId String?
+  iconUrl      String?
+  sortOrder    Int         @default(0)
+  expiresAt    DateTime?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  userMissions UserMission[]
+
+  @@index([type, isActive])
+  @@index([expiresAt])
+  @@map("missions")
+}
+
+model UserMission {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  missionId   String
+  mission     Mission       @relation(fields: [missionId], references: [id])
+  progress    Json          @default("{}")
+  status      MissionStatus @default(AVAILABLE)
+  completedAt DateTime?
+  claimedAt   DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([userId, missionId])
+  @@index([userId, status])
+  @@map("user_missions")
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  iconUrl     String?
+  xpReward    Int      @default(0)
+  isSecret    Boolean  @default(false)
+  rarity      String   @default("common") // common, rare, epic, legendary
+  createdAt   DateTime @default(now())
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@map("user_achievements")
+}
+
+model BattlePass {
+  id                  String   @id @default(cuid())
+  seasonId            String   @unique
+  name                String
+  description         String?
+  bannerUrl           String?
+  startDate           DateTime
+  endDate             DateTime
+  freeRewards         Json // Array of { tier: number, rewardType: string, rewardAmount: number }
+  premiumRewards      Json
+  premiumPriceInCents BigInt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  userBattlePasses UserBattlePass[]
+
+  @@index([startDate, endDate])
+  @@map("battle_passes")
+}
+
+model UserBattlePass {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  battlePassId String
+  battlePass   BattlePass @relation(fields: [battlePassId], references: [id])
+  xp           Int        @default(0)
+  isPremium    Boolean    @default(false)
+  currentTier  Int        @default(0)
+  purchasedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([userId, battlePassId])
+  @@index([userId])
+  @@map("user_battle_passes")
+}
+
+model Promotion {
+  id                String        @id @default(cuid())
+  code              String        @unique
+  name              String
+  description       String?
+  type              PromotionType
+  value             Decimal       @db.Decimal(10, 4)
+  minDepositInCents BigInt?
+  maxRewardInCents  BigInt?
+  usageLimit        Int?
+  usedCount         Int           @default(0)
+  perUserLimit      Int           @default(1)
+  isActive          Boolean       @default(true)
+  startsAt          DateTime
+  expiresAt         DateTime?
+  eligibleVipLevels Json? // Array of VIPLevel strings
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  userPromotions UserPromotion[]
+
+  @@index([code, isActive])
+  @@index([expiresAt])
+  @@map("promotions")
+}
+
+model UserPromotion {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promotionId         String
+  promotion           Promotion @relation(fields: [promotionId], references: [id])
+  bonusAwardedInCents BigInt    @default(0)
+  usedAt              DateTime  @default(now())
+
+  @@unique([userId, promotionId])
+  @@index([userId])
+  @@map("user_promotions")
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean             @default(false)
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model PushToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  deviceType String // 'ios' | 'android' | 'web'
+  deviceId   String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@map("push_tokens")
+}
+
+model LiveOpsConfig {
+  id          String   @id @default(cuid())
+  key         String
+  value       Json
+  environment String   @default("production")
+  description String?
+  createdBy   String
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([key, environment])
+  @@index([environment])
+  @@map("live_ops_configs")
+}
+
+model AnalyticsEvent {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId   String?
+  event       String
+  properties  Json      @default("{}")
+  deviceId    String?
+  ipAddress   String?
+  timestamp   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([userId])
+  @@index([event])
+  @@index([timestamp])
+  @@map("analytics_events")
+}
+
+model KYCProfile {
+  id                String           @id @default(cuid())
+  userId            String           @unique
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            KYCStatus        @default(PENDING)
+  tier              KYCTier          @default(UNVERIFIED)
+  documentType      KYCDocumentType?
+  documentFrontUrl  String?
+  documentBackUrl   String?
+  selfieUrl         String?
+  verifiedAt        DateTime?
+  rejectedReason    String?
+  provider          String? // KYC provider name
+  providerReference String?
+  attempts          Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+  @@map("kyc_profiles")
+}
+
+model Leaderboard {
+  id          String            @id @default(cuid())
+  type        LeaderboardType
+  period      LeaderboardPeriod
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score       BigInt            @default(0)
+  rank        Int?
+  metadata    Json?
+  periodStart DateTime
+  periodEnd   DateTime?
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([type, period, userId, periodStart])
+  @@index([type, period, score])
+  @@index([userId])
+  @@map("leaderboards")
+}
