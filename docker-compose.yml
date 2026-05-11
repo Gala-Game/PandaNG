@@ -233,22 +233,4 @@ services:
     networks:
       - panda-ng-network
 
-  admin:
-    build:
-      context: ./apps/admin
-      dockerfile: Dockerfile
-    container_name: pandang-admin
-    restart: unless-stopped
-    ports:
-      - '3009:3009'
-    env_file:
-      - .env
-    environment:
-      PORT: 3009
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - panda-ng-network
+
