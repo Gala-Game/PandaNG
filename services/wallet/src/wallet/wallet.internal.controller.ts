@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
-import { IsString, IsOptional, IsNumberString, IsEnum, Min, IsPositive } from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsEnum, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 /** Allowed transaction types for internal service-to-service calls */
@@ -29,8 +29,9 @@ class InternalTransactionDto {
   @IsString()
   userId: string;
 
-  /** Must be a positive integer string — will be converted to BigInt */
+  /** Must be a positive integer string (≥1) — will be converted to BigInt */
   @IsNumberString({ no_symbols: true })
+  @Matches(/^[1-9][0-9]*$/, { message: 'amountInCents must be a positive integer string' })
   amountInCents: string;
 
   @IsEnum(InternalTransactionType)
