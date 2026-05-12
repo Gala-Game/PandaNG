@@ -55,5 +55,7 @@ export function normalizePagination(
   const rawLimit = partial.limit;
   const page = Math.max(1, Number.isFinite(rawPage) ? (rawPage as number) : 1);
   const limit = Math.min(maxLimit, Math.max(1, Number.isFinite(rawLimit) ? (rawLimit as number) : 20));
-  return { page, limit, sortBy: partial.sortBy, sortOrder: partial.sortOrder ?? 'desc' };
+  const result: PaginationDto = { page, limit, sortOrder: partial.sortOrder ?? 'desc' };
+  if (partial.sortBy !== undefined) result.sortBy = partial.sortBy;
+  return result;
 }

@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     },
     update: {},
   });
-  console.log('✅ Admin user seeded — admin@pandang.com / Admin@PandaNG2024!');
+  console.log('✅ Admin user seeded — admin@pandang.com (see .env.example for seed credentials)');
 
   // ── Demo player ───────────────────────────────────────────────────────────
   const playerHash = await bcrypt.hash('Player@PandaNG2024!', 12);
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     },
     update: {},
   });
-  console.log('✅ Demo player seeded  — player@pandang.com / Player@PandaNG2024!');
+  console.log('✅ Demo player seeded  — player@pandang.com (see .env.example for seed credentials)');
 
   // ── LiveOps defaults ──────────────────────────────────────────────────────
   const liveOps = [

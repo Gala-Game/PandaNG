@@ -8,8 +8,6 @@ import { useWalletStore, formatPHP } from '@/store/wallet.store';
 
 const NAV_LINKS = [
   { href: '/games', label: 'GAMES' },
-  { href: '/jackpots', label: 'JACKPOTS' },
-  { href: '/leaderboard', label: 'LEADERBOARD' },
 ];
 
 export function Navbar() {

@@ -62,7 +62,7 @@ function weightedSymbol(float: number): SlotSymbol {
     cumulative += SYMBOL_WEIGHTS[sym];
     if (target < cumulative) return sym;
   }
-  return SYMBOLS[SYMBOLS.length - 1] as SlotSymbol;
+  return SYMBOLS[SYMBOLS.length - 1];
 }
 
 /** Spin the reels — returns a 5×3 grid of symbols */

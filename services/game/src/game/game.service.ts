@@ -20,15 +20,6 @@ import {
 } from '@panda-ng/game-sdk';
 import { firstValueFrom } from 'rxjs';
 
-// Prisma GameType → game-sdk resolver
-const GAME_TYPE_MAP: Record<string, GameTypeDto> = {
-  SLOTS: GameTypeDto.SLOTS,
-  CRASH: GameTypeDto.CRASH,
-  DRAGON_DICE: GameTypeDto.DRAGON_DICE,
-  PANDA_SPIN: GameTypeDto.PANDA_SPIN,
-  BAMBOO_BLAST: GameTypeDto.BAMBOO_BLAST,
-};
-
 // Enum values that mirror prisma/schema.prisma GameSessionStatus
 const SESSION_STATUS = {
   STARTED: 'STARTED' as const,
@@ -191,6 +182,7 @@ export class GameService {
     }
 
     // Credit wallet if player won
+    let payoutFailed = false;
     if (winInCents > 0n) {
       const winReference = `WIN-${sessionId}`;
       try {
@@ -205,21 +197,23 @@ export class GameService {
         );
       } catch (err) {
         this.logger.error(`CRITICAL: Failed to credit win for session ${sessionId}`, err);
-        // Mark session for manual review — do NOT throw, outcome is determined
+        payoutFailed = true;
       }
     }
 
     // Fire-and-forget jackpot contribution
     this.contributeToJackpot(betInCents).catch(() => void 0);
 
-    // Update session
+    // Update session — use ABANDONED + payoutError flag if credit failed
     const updatedSession = await this.prisma.gameSession.update({
       where: { id: sessionId },
       data: {
-        status: SESSION_STATUS.COMPLETED,
+        status: payoutFailed ? SESSION_STATUS.ABANDONED : SESSION_STATUS.COMPLETED,
         winAmountInCents: winInCents,
         endedAt: new Date(),
-        metadata: result as any,
+        metadata: payoutFailed
+          ? { ...(result as object), payoutError: true }
+          : (result as object),
       },
     });
 
@@ -286,7 +280,8 @@ export class GameService {
       minBetInCents: p.minBetInCents.toString(),
       maxBetInCents: p.maxBetInCents.toString(),
       rtp: Number(p.rtp),
-    }));  }
+    }));
+  }
 
   private serializeSession(s: Record<string, unknown>) {
     return {
@@ -300,11 +295,13 @@ export class GameService {
 
   private async contributeToJackpot(betInCents: bigint): Promise<void> {
     try {
-      // Contribute to GRAND jackpot — 0.5% of bet
-      const jackpots = await firstValueFrom(
-        this.http.get<{ data: Array<{ id: string }> }>(`${this.jackpotUrl}/api/v1/jackpots`),
+      // GET /api/v1/jackpots returns a plain array of jackpot objects
+      const response = await firstValueFrom(
+        this.http.get<Array<{ id: string; tier: string }>>(`${this.jackpotUrl}/api/v1/jackpots`),
       );
-      const grand = jackpots.data?.data?.[0];
+      const jackpots = Array.isArray(response.data) ? response.data : [];
+      // Contribute to GRAND jackpot — 0.5% of bet
+      const grand = jackpots.find((j) => j.tier === 'GRAND');
       if (grand) {
         await firstValueFrom(
           this.http.post(`${this.jackpotUrl}/api/v1/jackpots/${grand.id}/contribute`, {

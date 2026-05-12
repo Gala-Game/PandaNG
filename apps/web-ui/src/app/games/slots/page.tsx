@@ -51,14 +51,14 @@ export default function SlotsPage() {
     setSpinning(true);
     setSpinReels(true);
 
-    try {
-      // Show spinning animation
-      const animInterval = setInterval(() => {
-        setReels(Array.from({ length: 5 }, () =>
-          Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)] ?? '🐼')
-        ));
-      }, 80);
+    // Show spinning animation
+    const animInterval = setInterval(() => {
+      setReels(Array.from({ length: 5 }, () =>
+        Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)] ?? '🐼')
+      ));
+    }, 80);
 
+    try {
       // Start session
       const session = await gameApi.startSession({ gameType: 'SLOTS', betAmountInCents: betCents });
       setSessionInfo({ serverSeedHash: session.serverSeedHash, clientSeed: session.clientSeed, nonce: session.nonce });
@@ -85,8 +85,9 @@ export default function SlotsPage() {
       await fetchBalance();
     } catch (err) {
       setError('Failed to spin. Please try again.');
-      setSpinReels(false);
     } finally {
+      clearInterval(animInterval);
+      setSpinReels(false);
       setSpinning(false);
     }
   }, [spinning, isAuthenticated, betCents, balanceInCents, subtractBet, addWin, fetchBalance]);

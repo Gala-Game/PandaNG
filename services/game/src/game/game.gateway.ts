@@ -7,7 +7,15 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/game' })
+@WebSocketGateway({
+  cors: {
+    origin: (process.env['CORS_ORIGINS'] ?? 'http://localhost:3000')
+      .split(',')
+      .map((o) => o.trim()),
+    credentials: true,
+  },
+  namespace: '/game',
+})
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private server: Server;

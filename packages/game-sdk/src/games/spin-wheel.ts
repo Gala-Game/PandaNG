@@ -22,7 +22,7 @@ export function spinWheel(serverSeed: string, clientSeed: string, nonce: number)
     cumulative += segment.probability;
     if (float < cumulative) return segment;
   }
-  return WHEEL_SEGMENTS[WHEEL_SEGMENTS.length - 1] as WheelSegment;
+  return WHEEL_SEGMENTS[WHEEL_SEGMENTS.length - 1];
 }
 
 export interface WheelResult {
@@ -39,8 +39,10 @@ export function getWheelResult(
   betInCents: bigint,
 ): WheelResult {
   const segment = spinWheel(serverSeed, clientSeed, nonce);
-  const segmentIndex = WHEEL_SEGMENTS.indexOf(segment as typeof WHEEL_SEGMENTS[number]);
-  const winInCents = BigInt(Math.floor(Number(betInCents) * segment.multiplier));
+  const segmentIndex = WHEEL_SEGMENTS.indexOf(segment);
+  // Use integer arithmetic: multiplier expressed as basis-points (×100) to avoid float money
+  const winInCents =
+    (betInCents * BigInt(Math.round(segment.multiplier * 100))) / 100n;
   const netChangeInCents = winInCents - betInCents;
 
   return { segmentIndex, segment, winInCents, netChangeInCents };

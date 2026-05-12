@@ -13,7 +13,6 @@ const GAMES = [
   { slug: 'crash', name: 'Panda Crash', emoji: '🚀', desc: 'Multiplier crash • Cash out any time', badge: 'LIVE', glow: 'pink' as const },
   { slug: 'dice', name: 'Dragon Dice', emoji: '🎲', desc: 'Over / under • Up to 9900×', badge: null, glow: 'cyan' as const },
   { slug: 'spin-wheel', name: 'Panda Spin Wheel', emoji: '🎡', desc: '9 segments • Up to 100×', badge: null, glow: 'cyan' as const },
-  { slug: 'bamboo-blast', name: 'Bamboo Blast', emoji: '💥', desc: 'Instant win slots variant', badge: 'NEW', glow: 'pink' as const },
 ];
 
 export default function GamesPage() {
