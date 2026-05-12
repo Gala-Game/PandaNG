@@ -15,5 +15,8 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "devDependencies": {
+    "@types/node": "^20.12.0"
+  }
 }

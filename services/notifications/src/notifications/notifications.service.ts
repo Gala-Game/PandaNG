@@ -68,7 +68,11 @@ export class NotificationsService {
     });
 
     if (channel === NotificationChannel.PUSH) {
-      await this.sendPushToUser(userId, { token: '', title, body, data: data as Record<string, string> });
+      // Stringify all data values — FCM requires Record<string, string>
+      const pushData: Record<string, string> = data
+        ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]))
+        : {};
+      await this.sendPushToUser(userId, { token: '', title, body, data: pushData });
     }
 
     return notification;

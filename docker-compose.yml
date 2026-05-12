@@ -73,8 +73,8 @@ services:
 
   wallet:
     build:
-      context: ./services/wallet
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/wallet/Dockerfile
     container_name: pandang-wallet
     restart: unless-stopped
     ports:
@@ -93,8 +93,8 @@ services:
 
   jackpot:
     build:
-      context: ./services/jackpot
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/jackpot/Dockerfile
     container_name: pandang-jackpot
     restart: unless-stopped
     ports:
@@ -113,8 +113,8 @@ services:
 
   realtime:
     build:
-      context: ./services/realtime
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/realtime/Dockerfile
     container_name: pandang-realtime
     restart: unless-stopped
     ports:
@@ -133,8 +133,8 @@ services:
 
   rewards:
     build:
-      context: ./services/rewards
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/rewards/Dockerfile
     container_name: pandang-rewards
     restart: unless-stopped
     ports:
@@ -153,8 +153,8 @@ services:
 
   notifications:
     build:
-      context: ./services/notifications
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/notifications/Dockerfile
     container_name: pandang-notifications
     restart: unless-stopped
     ports:
@@ -173,8 +173,8 @@ services:
 
   fraud:
     build:
-      context: ./services/fraud
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/fraud/Dockerfile
     container_name: pandang-fraud
     restart: unless-stopped
     ports:
@@ -193,8 +193,8 @@ services:
 
   admin-api:
     build:
-      context: ./services/admin-api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/admin-api/Dockerfile
     container_name: pandang-admin-api
     restart: unless-stopped
     ports:
@@ -215,8 +215,8 @@ services:
 
   web-ui:
     build:
-      context: ./apps/web-ui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web-ui/Dockerfile
     container_name: pandang-web-ui
     restart: unless-stopped
     ports:

@@ -21,8 +21,9 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              // 'unsafe-eval' and 'unsafe-inline' removed for production security.
+              // 'unsafe-eval' and 'unsafe-inline' removed from script-src for production security.
               // Use a nonce-based CSP middleware (see Next.js docs) to allow inline scripts.
+              // Note: 'unsafe-inline' is retained in style-src for CSS-in-JS compatibility.
               "script-src 'self'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",

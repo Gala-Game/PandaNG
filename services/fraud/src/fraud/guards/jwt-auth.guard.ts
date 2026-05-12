@@ -22,7 +22,7 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request & { user?: JwtPayload }>();
     const authHeader = request.headers['authorization'];
 
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Authentication required');
     }
 

@@ -15,7 +15,7 @@ import {
   getPaginationOffset,
 } from '@panda-ng/utils';
 import type { PaginatedResult } from '@panda-ng/utils';
-import { TransactionType } from '@panda-ng/types';
+import type { WalletLedgerEntry, TransactionType } from '@prisma/client';
 
 @Injectable()
 export class WalletService {
@@ -36,7 +36,16 @@ export class WalletService {
       where: { userId },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    return wallet;
+    // Serialize BigInt fields before returning — JSON.stringify throws on native BigInt
+    return {
+      ...wallet,
+      balanceInCents: wallet.balanceInCents.toString(),
+      bonusBalanceInCents: wallet.bonusBalanceInCents.toString(),
+      totalDepositedInCents: wallet.totalDepositedInCents.toString(),
+      totalWithdrawnInCents: wallet.totalWithdrawnInCents.toString(),
+      totalWageredInCents: wallet.totalWageredInCents.toString(),
+      totalWonInCents: wallet.totalWonInCents.toString(),
+    };
   }
 
   async getBalance(userId: string) {
@@ -294,6 +303,7 @@ export class WalletService {
     if (!withdrawal || withdrawal.userId !== userId) {
       throw new NotFoundException('Withdrawal not found');
     }
-    return withdrawal;
+    // Serialize BigInt fields before returning — JSON.stringify throws on native BigInt
+    return { ...withdrawal, amountInCents: withdrawal.amountInCents.toString() };
   }
 }

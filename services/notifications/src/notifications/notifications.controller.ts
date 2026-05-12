@@ -10,7 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
@@ -41,6 +41,8 @@ class RegisterPushTokenBodyDto implements RegisterPushTokenDto {
   token!: string;
 
   @ApiProperty({ enum: ['ios', 'android', 'web'] })
+  @IsString()
+  @IsIn(['ios', 'android', 'web'])
   deviceType!: 'ios' | 'android' | 'web';
 
   @ApiProperty()

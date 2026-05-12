@@ -5,7 +5,7 @@ import { JackpotGateway } from './jackpot.gateway';
 import { RedisService } from './redis.service';
 import { ContributeDto } from './dto/contribute.dto';
 import type { JackpotTickPayload, JackpotWinPayload } from '@panda-ng/types';
-import { SocketEvents } from '@panda-ng/types';
+import { JackpotTier, SocketEvents } from '@panda-ng/types';
 
 @Injectable()
 export class JackpotService {
@@ -107,10 +107,10 @@ export class JackpotService {
           ...win,
           username: winner?.username ?? 'Lucky Panda',
           amountInCents: winAmount.toString(),
-          tier: jackpot.tier,
+          tier: jackpot.tier as JackpotTier,
         },
         newSeedAmountInCents: jackpot.seedAmountInCents.toString(),
-        tier: jackpot.tier,
+        tier: jackpot.tier as JackpotTier,
       };
 
       this.gateway.broadcastJackpotWin(winPayload);
@@ -140,7 +140,7 @@ export class JackpotService {
       const payload: JackpotTickPayload = {
         jackpots: jackpots.map((j) => ({
           id: j.id,
-          tier: j.tier,
+          tier: j.tier as JackpotTier,
           currentAmountInCents: j.currentAmountInCents.toString(),
           name: j.name,
         })),
