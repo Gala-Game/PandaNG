@@ -1,0 +1,236 @@
+version: '3.9'
+
+networks:
+  panda-ng-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pandang-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pandang
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pandang_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pandang -d pandang_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - panda-ng-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: pandang-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - panda-ng-network
+
+  # ── Services ────────────────────────────────────────────────────────────────
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    container_name: pandang-auth
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    env_file:
+      - .env
+    environment:
+      PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  wallet:
+    build:
+      context: .
+      dockerfile: services/wallet/Dockerfile
+    container_name: pandang-wallet
+    restart: unless-stopped
+    ports:
+      - '3002:3002'
+    env_file:
+      - .env
+    environment:
+      PORT: 3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  jackpot:
+    build:
+      context: .
+      dockerfile: services/jackpot/Dockerfile
+    container_name: pandang-jackpot
+    restart: unless-stopped
+    ports:
+      - '3003:3003'
+    env_file:
+      - .env
+    environment:
+      PORT: 3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  realtime:
+    build:
+      context: .
+      dockerfile: services/realtime/Dockerfile
+    container_name: pandang-realtime
+    restart: unless-stopped
+    ports:
+      - '3004:3004'
+    env_file:
+      - .env
+    environment:
+      PORT: 3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  rewards:
+    build:
+      context: .
+      dockerfile: services/rewards/Dockerfile
+    container_name: pandang-rewards
+    restart: unless-stopped
+    ports:
+      - '3005:3005'
+    env_file:
+      - .env
+    environment:
+      PORT: 3005
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  notifications:
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    container_name: pandang-notifications
+    restart: unless-stopped
+    ports:
+      - '3006:3006'
+    env_file:
+      - .env
+    environment:
+      PORT: 3006
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  fraud:
+    build:
+      context: .
+      dockerfile: services/fraud/Dockerfile
+    container_name: pandang-fraud
+    restart: unless-stopped
+    ports:
+      - '3007:3007'
+    env_file:
+      - .env
+    environment:
+      PORT: 3007
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  admin-api:
+    build:
+      context: .
+      dockerfile: services/admin-api/Dockerfile
+    container_name: pandang-admin-api
+    restart: unless-stopped
+    ports:
+      - '3008:3008'
+    env_file:
+      - .env
+    environment:
+      PORT: 3008
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  # ── Apps ────────────────────────────────────────────────────────────────────
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: apps/web-ui/Dockerfile
+    container_name: pandang-web-ui
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+
