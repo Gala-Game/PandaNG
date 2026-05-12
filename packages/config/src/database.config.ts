@@ -11,9 +11,10 @@ export function createDatabaseConfig(): DatabaseConfig {
   const url = process.env['DATABASE_URL'];
   if (!url) throw new Error('DATABASE_URL environment variable is required');
 
+  const directUrl = process.env['DATABASE_DIRECT_URL'];
   return {
     url,
-    directUrl: process.env['DATABASE_DIRECT_URL'],
+    ...(directUrl !== undefined ? { directUrl } : {}),
     maxConnections: parseInt(process.env['DB_MAX_CONNECTIONS'] ?? '10', 10),
     connectionTimeout: parseInt(process.env['DB_CONNECTION_TIMEOUT'] ?? '5000', 10),
     queryTimeout: parseInt(process.env['DB_QUERY_TIMEOUT'] ?? '30000', 10),

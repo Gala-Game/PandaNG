@@ -22,7 +22,7 @@ export function createRedisConfig(keyPrefix = 'panda-ng:'): RedisConfig {
 
   return {
     url,
-    clusterNodes,
+    ...(clusterNodes !== undefined ? { clusterNodes } : {}),
     keyPrefix,
     maxRetries: parseInt(process.env['REDIS_MAX_RETRIES'] ?? '3', 10),
     retryDelay: parseInt(process.env['REDIS_RETRY_DELAY'] ?? '1000', 10),

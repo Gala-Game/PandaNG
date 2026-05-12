@@ -26,7 +26,7 @@ export interface JackpotWin {
   amountInCents: bigint;
   gameSessionId: string;
   tier: JackpotTier;
-  confirmedAt: Date;
+  confirmedAt?: Date | null;
   createdAt: Date;
 }
 
@@ -41,7 +41,7 @@ export interface JackpotTickPayload {
 }
 
 export interface JackpotWinPayload {
-  win: JackpotWin & { amountInCents: string };
+  win: Omit<JackpotWin, 'amountInCents'> & { amountInCents: string };
   newSeedAmountInCents: string;
   tier: JackpotTier;
 }

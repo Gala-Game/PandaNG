@@ -270,12 +270,7 @@ export class GameService {
       },
       orderBy: { gameType: 'asc' },
     });
-    return profiles.map((p: {
-      minBetInCents: bigint;
-      maxBetInCents: bigint;
-      rtp: bigint | number;
-      [key: string]: unknown;
-    }) => ({
+    return profiles.map((p) => ({
       ...p,
       minBetInCents: p.minBetInCents.toString(),
       maxBetInCents: p.maxBetInCents.toString(),
