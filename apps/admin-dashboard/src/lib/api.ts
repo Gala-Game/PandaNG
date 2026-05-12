@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const ADMIN_API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_URL ?? 'http://localhost:3008';
-const GAME_ENGINE_BASE = process.env.NEXT_PUBLIC_GAME_ENGINE_URL ?? 'http://localhost:3001';
-const PAYMENT_BASE = process.env.NEXT_PUBLIC_PAYMENT_URL ?? 'http://localhost:3003';
+const ADMIN_API_BASE = process.env['NEXT_PUBLIC_ADMIN_API_URL'] ?? 'http://localhost:3008';
+const GAME_ENGINE_BASE = process.env['NEXT_PUBLIC_GAME_ENGINE_URL'] ?? 'http://localhost:3001';
+const PAYMENT_BASE = process.env['NEXT_PUBLIC_PAYMENT_URL'] ?? 'http://localhost:3003';
 
 export const adminApiClient = axios.create({
   baseURL: ADMIN_API_BASE,
