@@ -11,7 +11,8 @@ import { Logger } from '@nestjs/common';
   cors: {
     origin: (process.env['CORS_ORIGINS'] ?? 'http://localhost:3000')
       .split(',')
-      .map((o) => o.trim()),
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0),
     credentials: true,
   },
   namespace: '/game',
