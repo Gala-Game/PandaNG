@@ -89,7 +89,7 @@ export class WebhookController {
             {
               status: 'PENDING',
               amountInCents: verification.amountInCents,
-              provider: provider as never,
+              provider: provider as import('@prisma/client').PaymentProvider,
             },
           ],
         },

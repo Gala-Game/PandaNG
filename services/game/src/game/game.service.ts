@@ -468,10 +468,11 @@ export class GameService {
       take: 1,
     });
 
-    if (jackpots.length === 0) return;
+    const jackpot = jackpots[0];
+    if (!jackpot) return;
 
     await this.prisma.jackpot.update({
-      where: { id: jackpots[0]!.id },
+      where: { id: jackpot.id },
       data: { currentAmountInCents: { increment: contribution } },
     });
   }

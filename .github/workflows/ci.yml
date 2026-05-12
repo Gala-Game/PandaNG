@@ -18,6 +18,8 @@ jobs:
   lint-and-typecheck:
     name: Lint & Type-check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +45,8 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -69,6 +73,8 @@ jobs:
     name: Build Packages
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -96,6 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, build-packages]
     if: github.event_name == 'push'
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

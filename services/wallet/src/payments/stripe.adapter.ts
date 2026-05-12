@@ -35,7 +35,7 @@ export class StripeAdapter implements PaymentAdapter {
       'payment_method_types[]': 'card',
       'line_items[0][price_data][currency]': params.currency.toLowerCase(),
       'line_items[0][price_data][product_data][name]': params.description,
-      'line_items[0][price_data][unit_amount]': params.amountInCents.toString(),
+      'line_items[0][price_data][unit_amount]': params.amountInCents.toString(), // Stripe expects integer cents; max safe value is 99999999 (₱999,999.99)
       'line_items[0][quantity]': '1',
       mode: 'payment',
       success_url: params.successUrl,

@@ -14,6 +14,7 @@
 import { createHmac } from 'crypto';
 
 const HOUSE_EDGE = 0.01; // 1%
+const BUST_MODULO = Math.round(1 / HOUSE_EDGE); // pre-computed constant
 
 /**
  * Compute the crash multiplier from seeds. Minimum is 1.00×.
@@ -28,7 +29,7 @@ export function computeCrashPoint(serverSeed: string, nonce: number): number {
   const MAX = 2 ** 52 - 1;
 
   // Instant bust for house edge
-  if (h % Math.round(1 / HOUSE_EDGE) === 0) return 1.0;
+  if (h % BUST_MODULO === 0) return 1.0;
 
   const e = MAX / (h % MAX);
   const multiplier = Math.floor(e * 100) / 100;
