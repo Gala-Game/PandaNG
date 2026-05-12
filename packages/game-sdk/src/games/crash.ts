@@ -44,8 +44,9 @@ export function getCrashResult(
   const crashPoint = calculateCrashPoint(serverSeed, clientSeed, nonce);
   const cashedOut = cashOutAt > 0 && cashOutAt <= crashPoint;
   const multiplier = cashedOut ? cashOutAt : 0;
+  // Use integer arithmetic: multiplier expressed as basis-points (×100) to avoid float money
   const winInCents = cashedOut
-    ? BigInt(Math.floor(Number(betInCents) * multiplier))
+    ? (betInCents * BigInt(Math.round(multiplier * 100))) / 100n
     : 0n;
   const netChangeInCents = winInCents - betInCents;
 

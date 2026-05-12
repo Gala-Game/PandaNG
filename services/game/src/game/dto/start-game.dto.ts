@@ -1,4 +1,4 @@
-import { IsEnum, IsPositive, Min, Max, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsPositive, IsInt, Min, Max, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -17,6 +17,7 @@ export class StartGameDto {
 
   @ApiProperty({ description: 'Bet amount in cents', example: 1000 })
   @Type(() => Number)
+  @IsInt()
   @IsPositive()
   @Min(10)
   @Max(100_000_000)

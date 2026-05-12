@@ -40,7 +40,10 @@ export function getDiceResult(
   const roll = rollDice(serverSeed, clientSeed, nonce);
   const won = isOver ? roll > target : roll < target;
   const payout = getDicePayoutMultiplier(target, isOver);
-  const winInCents = won ? BigInt(Math.floor(Number(betInCents) * payout)) : 0n;
+  // Use integer arithmetic: payout expressed as basis-points (×100) to avoid float money
+  const winInCents = won
+    ? (betInCents * BigInt(Math.round(payout * 100))) / 100n
+    : 0n;
   const netChangeInCents = winInCents - betInCents;
 
   return { roll, won, payout, winInCents, netChangeInCents };

@@ -4,20 +4,37 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+  Injectable,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsEnum, Min, IsPositive } from 'class-validator';
+import { Type } from 'class-transformer';
+
+/** Allowed transaction types for internal service-to-service calls */
+enum InternalTransactionType {
+  BET = 'BET',
+  WIN = 'WIN',
+  BONUS = 'BONUS',
+  REFUND = 'REFUND',
+  JACKPOT_WIN = 'JACKPOT_WIN',
+  MISSION_REWARD = 'MISSION_REWARD',
+}
 
 class InternalTransactionDto {
   @IsString()
   userId: string;
 
-  @IsString()
+  /** Must be a positive integer string — will be converted to BigInt */
+  @IsNumberString({ no_symbols: true })
   amountInCents: string;
 
-  @IsString()
-  type: string;
+  @IsEnum(InternalTransactionType)
+  type: InternalTransactionType;
 
   @IsOptional()
   @IsString()
@@ -29,12 +46,32 @@ class InternalTransactionDto {
 }
 
 /**
+ * Guard that enforces X-Internal-Api-Key header for service-to-service calls.
+ * In production this is backed by a secret stored in INTERNAL_API_KEY env var.
+ */
+@Injectable()
+class InternalApiKeyGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest<{ headers: Record<string, string | undefined> }>();
+    const key = req.headers['x-internal-api-key'];
+    const expected = process.env['INTERNAL_API_KEY'];
+    if (!expected) {
+      throw new UnauthorizedException('INTERNAL_API_KEY is not configured');
+    }
+    if (!key || key !== expected) {
+      throw new UnauthorizedException('Invalid internal API key');
+    }
+    return true;
+  }
+}
+
+/**
  * Internal endpoints for service-to-service communication.
- * NOT protected by user JWT — only accessible inside the private network.
- * In production, restrict via network policy or an API key header.
+ * Protected by X-Internal-Api-Key header — must NOT be publicly routable.
  */
 @ApiTags('internal')
 @Controller('internal')
+@UseGuards(InternalApiKeyGuard)
 export class InternalWalletController {
   constructor(private readonly walletService: WalletService) {}
 
@@ -43,14 +80,20 @@ export class InternalWalletController {
   @ApiOperation({ summary: 'Internal: debit wallet (service-to-service)' })
   async debit(@Body() dto: InternalTransactionDto) {
     const amount = BigInt(dto.amountInCents);
-    // TransactionType enum values match string literals in Prisma schema
-    return this.walletService.debit(
+    const entry = await this.walletService.debit(
       dto.userId,
       amount,
-      dto.type as never, // will be properly typed once Prisma client is generated
+      dto.type as never,
       dto.reference,
       dto.description,
     );
+    // Serialize BigInt fields — JSON.stringify throws on native BigInt
+    return {
+      ...entry,
+      amountInCents: entry.amountInCents.toString(),
+      balanceBeforeInCents: entry.balanceBeforeInCents.toString(),
+      balanceAfterInCents: entry.balanceAfterInCents.toString(),
+    };
   }
 
   @Post('credit')
