@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FraudRiskLevel } from '@panda-ng/types';
 import { buildPaginatedResult, normalizePagination, getPaginationOffset } from '@panda-ng/utils';
+import type { Prisma } from '@prisma/client';
 
 interface ScoreTransactionDto {
   userId: string;
@@ -12,7 +13,7 @@ interface ScoreTransactionDto {
   metadata?: Record<string, unknown>;
 }
 
-interface RiskScore {
+export interface RiskScore {
   score: number;
   riskLevel: FraudRiskLevel;
   flags: string[];
@@ -195,7 +196,7 @@ export class FraudService {
     severity: FraudRiskLevel;
     data: Record<string, unknown>;
   }) {
-    return this.prisma.fraudSignal.create({ data });
+    return this.prisma.fraudSignal.create({ data: { ...data, data: data.data as Prisma.InputJsonValue } });
   }
 
   private calculateRiskLevel(score: number): FraudRiskLevel {

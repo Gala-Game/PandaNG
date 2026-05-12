@@ -80,7 +80,6 @@ export class AdminService {
             balanceInCents: user.wallet.balanceInCents.toString(),
             bonusBalanceInCents: user.wallet.bonusBalanceInCents.toString(),
             totalDepositedInCents: user.wallet.totalDepositedInCents.toString(),
-            totalWithdrawnInCents: user.wallet.totalWithdrawnInCents.toString(),
             totalWageredInCents: user.wallet.totalWageredInCents.toString(),
             totalWonInCents: user.wallet.totalWonInCents.toString(),
           }

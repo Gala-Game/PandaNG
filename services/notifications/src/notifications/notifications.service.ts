@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { buildPaginatedResult, normalizePagination, getPaginationOffset } from '@panda-ng/utils';
 import { NotificationType, NotificationChannel } from '@panda-ng/types';
 import type { PushPayload, RegisterPushTokenDto } from '@panda-ng/types';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
@@ -64,7 +65,7 @@ export class NotificationsService {
     channel = NotificationChannel.IN_APP,
   ) {
     const notification = await this.prisma.notification.create({
-      data: { userId, type, channel, title, body, data, sentAt: new Date() },
+      data: { userId, type, channel, title, body, data: data as Prisma.InputJsonValue | undefined, sentAt: new Date() },
     });
 
     if (channel === NotificationChannel.PUSH) {
