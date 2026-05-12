@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/pandang
+
+jobs:
+  build-and-push:
+    name: Build & Push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth
+            dockerfile: services/auth/Dockerfile
+          - service: wallet
+            dockerfile: services/wallet/Dockerfile
+          - service: game
+            dockerfile: services/game/Dockerfile
+          - service: jackpot
+            dockerfile: services/jackpot/Dockerfile
+          - service: realtime
+            dockerfile: services/realtime/Dockerfile
+          - service: rewards
+            dockerfile: services/rewards/Dockerfile
+          - service: notifications
+            dockerfile: services/notifications/Dockerfile
+          - service: fraud
+            dockerfile: services/fraud/Dockerfile
+          - service: admin-api
+            dockerfile: services/admin-api/Dockerfile
+          - service: web-ui
+            dockerfile: apps/web-ui/Dockerfile
+          - service: admin-dashboard
+            dockerfile: apps/admin-dashboard/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  notify-deploy:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## 🐼 PandaNG Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "All service images pushed to ${{ env.REGISTRY }}" >> $GITHUB_STEP_SUMMARY
+          echo "SHA: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY

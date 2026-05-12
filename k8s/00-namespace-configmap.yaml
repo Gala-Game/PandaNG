@@ -1,0 +1,40 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pandang
+  labels:
+    app.kubernetes.io/name: pandang
+
+---
+# ConfigMap for non-secret environment config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pandang-config
+  namespace: pandang
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  CORS_ORIGINS: "https://pandang.com,https://admin.pandang.com"
+  # Service ports
+  AUTH_SERVICE_PORT: "3001"
+  WALLET_SERVICE_PORT: "3002"
+  JACKPOT_SERVICE_PORT: "3003"
+  REALTIME_SERVICE_PORT: "3004"
+  REWARDS_SERVICE_PORT: "3005"
+  NOTIFICATIONS_SERVICE_PORT: "3006"
+  FRAUD_SERVICE_PORT: "3007"
+  ADMIN_API_SERVICE_PORT: "3008"
+  GAME_SERVICE_PORT: "3009"
+  # Internal service URLs
+  AUTH_SERVICE_URL: "http://auth:3001"
+  WALLET_SERVICE_URL: "http://wallet:3002"
+  JACKPOT_SERVICE_URL: "http://jackpot:3003"
+  REALTIME_SERVICE_URL: "http://realtime:3004"
+  REWARDS_SERVICE_URL: "http://rewards:3005"
+  NOTIFICATIONS_SERVICE_URL: "http://notifications:3006"
+  FRAUD_SERVICE_URL: "http://fraud:3007"
+  ADMIN_API_SERVICE_URL: "http://admin-api:3008"
+  GAME_SERVICE_URL: "http://game:3009"
