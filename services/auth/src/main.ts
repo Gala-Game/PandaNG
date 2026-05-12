@@ -58,6 +58,11 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
+  // Health check — outside global prefix, no auth required (for load-balancer probes)
+  app.getHttpAdapter().get('/health', (_req: unknown, res: { json: (data: object) => void }) => {
+    res.json({ status: 'ok', service: 'auth', timestamp: new Date().toISOString() });
+  });
+
   await app.listen(port);
   logger.log(`Auth service running on port ${port} [${nodeEnv}]`);
 }

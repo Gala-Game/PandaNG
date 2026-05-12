@@ -2,6 +2,114 @@
 
 Enterprise architecture blueprint for a **web-first, mobile-optimized, cyberpunk panda casino ecosystem** with real-time jackpots, financial-grade backend services, and DevSecOps hardening.
 
+---
+
+## Getting Started
+
+### Prerequisites
+
+| Tool | Version |
+|------|---------|
+| Node.js | ≥ 20 |
+| pnpm | ≥ 9 |
+| Docker & Docker Compose | ≥ 24 |
+| PostgreSQL | ≥ 16 (or use Docker) |
+| Redis | ≥ 7 (or use Docker) |
+
+### Quick Start (Docker Compose)
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/Gala-Game/PandaNG.git
+cd PandaNG
+
+# 2. Copy environment variables
+cp .env.example .env
+# Edit .env and fill in required secrets (DATABASE_URL, JWT_SECRET, etc.)
+
+# 3. Start all services (PostgreSQL + Redis + all backends + web UI)
+docker compose up -d
+
+# 4. Run database migrations
+docker compose exec auth npx prisma migrate deploy
+
+# 5. Open the app
+open http://localhost:3000
+```
+
+### Local Development (without Docker)
+
+```bash
+# Install all workspace dependencies
+pnpm install
+
+# Start infrastructure (PostgreSQL + Redis) only
+docker compose up -d postgres redis
+
+# Copy and fill in .env
+cp .env.example .env
+
+# Run Prisma migrations
+pnpm --filter @panda-ng/auth-service exec prisma migrate dev
+
+# Start all services in watch mode (Turborepo parallel)
+pnpm dev
+
+# Or start a single service
+pnpm --filter @panda-ng/auth-service dev
+```
+
+### Service Ports
+
+| Service | Port | Health Check |
+|---------|------|-------------|
+| Web UI (Next.js) | 3000 | `GET http://localhost:3000` |
+| Auth | 3001 | `GET http://localhost:3001/health` |
+| Wallet | 3002 | `GET http://localhost:3002/health` |
+| Jackpot | 3003 | `GET http://localhost:3003/health` |
+| Realtime (WS) | 3004 | `GET http://localhost:3004/health` |
+| Rewards | 3005 | `GET http://localhost:3005/health` |
+| Notifications | 3006 | `GET http://localhost:3006/health` |
+| Fraud | 3007 | `GET http://localhost:3007/health` |
+| Admin API | 3008 | `GET http://localhost:3008/health` |
+
+### Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start all services in watch mode |
+| `pnpm build` | Build all packages and services |
+| `pnpm test` | Run tests across all services |
+| `pnpm lint` | Lint all TypeScript files |
+| `pnpm type-check` | TypeScript type-check all workspaces |
+
+### Monorepo Structure
+
+```text
+PandaNG/
+├── apps/
+│   └── web-ui/               # Next.js 14 + Tailwind cyberpunk UI
+├── services/
+│   ├── auth/                 # JWT auth, OAuth, MFA (port 3001)
+│   ├── wallet/               # Ledger, deposits, withdrawals (port 3002)
+│   ├── jackpot/              # Progressive jackpot engine (port 3003)
+│   ├── realtime/             # Socket.IO + Redis pub/sub (port 3004)
+│   ├── rewards/              # VIP, missions, battle pass (port 3005)
+│   ├── notifications/        # Push + in-app notifications (port 3006)
+│   ├── fraud/                # Risk scoring, signals (port 3007)
+│   └── admin-api/            # Admin dashboard API (port 3008)
+├── packages/
+│   ├── types/                # Shared TypeScript types & enums
+│   ├── config/               # Shared config helpers
+│   └── utils/                # Shared utility functions
+├── prisma/                   # Prisma schema & migrations
+├── docker-compose.yml        # Development stack
+├── docker-compose.prod.yml   # Production stack
+└── turbo.json                # Turborepo pipeline config
+```
+
+---
+
 ## 1) Product Pillars
 
 - Luxury neon casino presentation (Cyber Panda visual DNA)
