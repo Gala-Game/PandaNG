@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Rajdhani } from 'next/font/google';
 import './globals.css';
+import { Providers } from '@/components/Providers';
+import { Navbar } from '@/components/layout/Navbar';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const rajdhani = Rajdhani({
@@ -20,7 +22,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // Do NOT restrict user scaling — required for accessibility (WCAG 1.4.4 Resize Text)
   themeColor: '#00FFFF',
 };
 
@@ -31,8 +32,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
       </head>
       <body className="font-body bg-deep-black text-panda-white min-h-screen">
-        {children}
+        <Providers>
+          <Navbar />
+          {children}
+        </Providers>
       </body>
     </html>
   );
 }
+
