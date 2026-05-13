@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { BetControls, WinDisplay, formatPHP } from '@/components/game/BetControls';
+import { BetControls, WinDisplay } from '@/components/game/BetControls';
 import { startGameSession, resolveDice } from '@/lib/api';
 import { useWalletStore } from '@/store';
 
