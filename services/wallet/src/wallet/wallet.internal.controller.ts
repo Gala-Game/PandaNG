@@ -13,7 +13,6 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
 import { IsString, IsOptional, IsNumberString, IsEnum, Matches } from 'class-validator';
-import { Type } from 'class-transformer';
 
 /** Allowed transaction types for internal service-to-service calls */
 enum InternalTransactionType {
