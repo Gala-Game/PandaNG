@@ -3,7 +3,7 @@
  * 5 reels × 3 rows, 20 paylines. All monetary values in BigInt cents.
  */
 
-import { generateFloats, floatToInt } from './rng';
+import { generateFloats } from './rng';
 
 // Symbol weights (higher = more common)
 const SYMBOLS = ['🐼', '🎋', '🌕', '💎', '🌸', '🍃', '🔴', '💰'] as const;
