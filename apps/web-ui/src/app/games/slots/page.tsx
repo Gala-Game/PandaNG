@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { BetControls, WinDisplay, formatPHP } from '@/components/game/BetControls';
 import { startGameSession, resolveSlots } from '@/lib/api';
