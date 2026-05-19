@@ -10,7 +10,7 @@ import { StripeAdapter } from './stripe.adapter';
 import { XenditAdapter } from './xendit.adapter';
 import type { PaymentAdapter, PaymentInitiateParams } from './payment-adapter.interface';
 
-export type SupportedProvider = 'GCASH' | 'MAYA' | 'GRABPAY' | 'STRIPE' | 'BANK_TRANSFER' | 'PAYPAL';
+export type SupportedProvider = 'GCASH' | 'MAYA' | 'GRABPAY' | 'STRIPE' | 'BANK_TRANSFER';
 
 @Injectable()
 export class PaymentService {
@@ -29,7 +29,6 @@ export class PaymentService {
       ['GRABPAY', payMongo],
       ['STRIPE', stripe],
       ['BANK_TRANSFER', xendit],
-      ['PAYPAL', xendit], // Fallback for unsupported providers
     ]);
   }
 

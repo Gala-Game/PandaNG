@@ -14,6 +14,22 @@ function hashPassword(plain: string): string {
 }
 
 async function main() {
+  // Safety guard: never seed in production with hardcoded credentials
+  if (process.env.NODE_ENV === 'production' && !process.env.SEED_ALLOW_PRODUCTION) {
+    throw new Error(
+      'Refusing to seed in production. Set SEED_ALLOW_PRODUCTION=1 to override (dangerous).',
+    );
+  }
+
+  const adminPassword =
+    process.env.SEED_ADMIN_PASSWORD ??
+    (process.env.NODE_ENV === 'production'
+      ? (() => { throw new Error('SEED_ADMIN_PASSWORD must be set in production'); })()
+      : 'Admin@PandaNG2026!');
+
+  const playerPassword =
+    process.env.SEED_PLAYER_PASSWORD ?? 'Demo@PandaNG2026!';
+
   console.log('🌱 Seeding database...');
 
   // ─── Demo Users ─────────────────────────────────────────────────────────────
@@ -23,7 +39,7 @@ async function main() {
     create: {
       email: 'admin@pandang.com',
       username: 'panda_admin',
-      passwordHash: hashPassword('Admin@PandaNG2026!'),
+      passwordHash: hashPassword(adminPassword),
       role: 'ADMIN',
       status: 'ACTIVE',
       kycStatus: 'VERIFIED',
@@ -44,7 +60,7 @@ async function main() {
     create: {
       email: 'demo@pandang.com',
       username: 'panda_demo',
-      passwordHash: hashPassword('Demo@PandaNG2026!'),
+      passwordHash: hashPassword(playerPassword),
       role: 'PLAYER',
       status: 'ACTIVE',
       kycStatus: 'VERIFIED',
@@ -230,8 +246,8 @@ async function main() {
   }
 
   console.log('\n🐼 Seed complete!');
-  console.log('Admin login: admin@pandang.com / Admin@PandaNG2026!');
-  console.log('Demo login:  demo@pandang.com  / Demo@PandaNG2026!');
+  console.log('Admin login: admin@pandang.com (password from SEED_ADMIN_PASSWORD env or default)');
+  console.log('Demo login:  demo@pandang.com  (password from SEED_PLAYER_PASSWORD env or default)');
 }
 
 main()

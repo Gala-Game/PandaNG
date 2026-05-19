@@ -31,7 +31,11 @@ export function computeCrashPoint(serverSeed: string, nonce: number): number {
   // Instant bust for house edge
   if (h % BUST_MODULO === 0) return 1.0;
 
-  const e = MAX / (h % MAX);
+  const hMod = h % MAX;
+  // When hMod === 0 the divisor would be zero — treat as a near-infinite multiplier capped at max payout
+  if (hMod === 0) return 100.0;
+
+  const e = MAX / hMod;
   const multiplier = Math.floor(e * 100) / 100;
   return Math.max(1.0, multiplier);
 }

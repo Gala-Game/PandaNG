@@ -12,7 +12,6 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 import { PaymentService } from './payment.service';
-import { WalletService } from '../wallet/wallet.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SupportedProvider } from './payment.service';
 
@@ -31,7 +30,6 @@ export class WebhookController {
 
   constructor(
     private readonly paymentService: PaymentService,
-    private readonly walletService: WalletService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -50,7 +48,11 @@ export class WebhookController {
       throw new BadRequestException(`Unknown provider: ${provider}`);
     }
 
-    const rawBody: Buffer = (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.from('');
+    const rawBody: Buffer | undefined = (req as Request & { rawBody?: Buffer }).rawBody;
+    if (!rawBody || rawBody.length === 0) {
+      this.logger.warn(`Webhook from ${provider} received without raw body — rejecting`);
+      throw new BadRequestException('Raw body required for signature verification');
+    }
 
     const signature = stripeSignature ?? paymongoSignature ?? xenditToken ?? '';
 
@@ -68,9 +70,12 @@ export class WebhookController {
       return { received: true };
     }
 
-    // Idempotency: check if this providerReference was already processed
+    // Idempotency: check if this (provider, providerReference) pair was already processed
     const existing = await this.prisma.payment.findFirst({
-      where: { providerReference: verification.providerReference },
+      where: {
+        providerReference: verification.providerReference,
+        provider: provider as import('@prisma/client').PaymentProvider,
+      },
     });
 
     if (existing && existing.status === 'SUCCESS') {
@@ -81,43 +86,63 @@ export class WebhookController {
     }
 
     if (verification.status === 'SUCCESS') {
-      // Find payment by provider reference or by amount proximity
+      // Find payment by stable (provider, providerReference) — never match by amount to avoid cross-user collisions
       const payment = await this.prisma.payment.findFirst({
         where: {
-          OR: [
-            { providerReference: verification.providerReference },
-            {
-              status: 'PENDING',
-              amountInCents: verification.amountInCents,
-              provider: provider as import('@prisma/client').PaymentProvider,
-            },
-          ],
+          providerReference: verification.providerReference,
+          provider: provider as import('@prisma/client').PaymentProvider,
         },
         orderBy: { createdAt: 'desc' },
       });
 
       if (payment) {
+        // Atomically mark SUCCESS and credit wallet in a single transaction to prevent double-credits
         await this.prisma.$transaction(async (tx) => {
-          // Mark payment as completed
-          await tx.payment.update({
-            where: { id: payment.id },
+          // Conditional update: only proceeds if still not SUCCESS (prevents race conditions)
+          const updated = await tx.payment.updateMany({
+            where: { id: payment.id, status: { not: 'SUCCESS' } },
             data: {
               status: 'SUCCESS',
               providerReference: verification.providerReference,
               webhookReceivedAt: new Date(),
             },
           });
-        });
 
-        // Credit wallet (outside the payment update tx so it uses the main wallet tx logic)
-        await this.walletService.credit(
-          payment.userId,
-          payment.amountInCents,
-          'DEPOSIT',
-          payment.reference,
-          `Deposit via ${provider}`,
-          { paymentId: payment.id, providerReference: verification.providerReference },
-        );
+          if (updated.count === 0) {
+            // Another process already completed this payment — skip credit
+            return;
+          }
+
+          const wallet = await tx.wallet.findUnique({
+            where: { userId: payment.userId },
+            select: { id: true, balanceInCents: true },
+          });
+          if (!wallet) throw new Error(`Wallet not found for user ${payment.userId}`);
+
+          const balanceBefore = wallet.balanceInCents;
+          const balanceAfter = balanceBefore + payment.amountInCents;
+
+          await tx.wallet.update({
+            where: { userId: payment.userId },
+            data: {
+              balanceInCents: balanceAfter,
+              totalDepositedInCents: { increment: payment.amountInCents },
+            },
+          });
+
+          await tx.walletLedgerEntry.create({
+            data: {
+              walletId: wallet.id,
+              type: 'DEPOSIT',
+              amountInCents: payment.amountInCents,
+              balanceBeforeInCents: balanceBefore,
+              balanceAfterInCents: balanceAfter,
+              reference: payment.reference,
+              description: `Deposit via ${provider}`,
+              metadata: { paymentId: payment.id, providerReference: verification.providerReference },
+            },
+          });
+        });
 
         this.logger.log(
           `Payment confirmed: ${payment.id} | user=${payment.userId} | amount=${payment.amountInCents}`,

@@ -10,6 +10,6 @@ module.exports = {
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
   moduleNameMapper: {
-    '^@panda-ng/(.*)$': '<rootDir>/../../packages/$1/src/index.ts',
+    '^@panda-ng/(.*)$': '<rootDir>/../../../packages/$1/src/index.ts',
   },
 };

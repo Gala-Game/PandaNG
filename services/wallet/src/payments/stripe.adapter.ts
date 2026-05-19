@@ -22,9 +22,8 @@ export class StripeAdapter implements PaymentAdapter {
   private readonly webhookSecret: string;
 
   constructor(private readonly config: ConfigService) {
-    this.secretKey = config.get<string>('STRIPE_SECRET_KEY') ?? 'sk_test_placeholder';
-    this.webhookSecret =
-      config.get<string>('STRIPE_WEBHOOK_SECRET') ?? 'whsec_placeholder';
+    this.secretKey = config.getOrThrow<string>('STRIPE_SECRET_KEY');
+    this.webhookSecret = config.getOrThrow<string>('STRIPE_WEBHOOK_SECRET');
   }
 
   async initiatePayment(params: PaymentInitiateParams): Promise<PaymentInitiateResult> {

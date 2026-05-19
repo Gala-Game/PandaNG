@@ -4,7 +4,7 @@
  * Docs: https://developers.xendit.co/
  */
 
-import { createHmac } from 'crypto';
+import { timingSafeEqual } from 'crypto';
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
@@ -22,8 +22,8 @@ export class XenditAdapter implements PaymentAdapter {
   private readonly callbackToken: string;
 
   constructor(private readonly config: ConfigService) {
-    this.secretKey = config.get<string>('XENDIT_SECRET_KEY') ?? 'xnd_placeholder';
-    this.callbackToken = config.get<string>('XENDIT_CALLBACK_TOKEN') ?? 'cb_placeholder';
+    this.secretKey = config.getOrThrow<string>('XENDIT_SECRET_KEY');
+    this.callbackToken = config.getOrThrow<string>('XENDIT_CALLBACK_TOKEN');
   }
 
   async initiatePayment(params: PaymentInitiateParams): Promise<PaymentInitiateResult> {
@@ -70,18 +70,21 @@ export class XenditAdapter implements PaymentAdapter {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       this.logger.error('Xendit request failed', error);
-      return {
-        checkoutUrl: `https://sandbox.xendit.co/invoice/${params.reference}`,
-        providerReference: `xnd_mock_${params.reference}`,
-      };
+      throw new BadRequestException('Payment initiation failed');
     }
   }
 
   async verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
-    // Xendit sends x-callback-token header — simple token check
-    const isValid = createHmac('sha256', this.callbackToken)
-      .update(payload)
-      .digest('hex') === signature || signature === this.callbackToken;
+    // Xendit uses x-callback-token — constant-time comparison against the static token
+    const tokenBuf = Buffer.from(this.callbackToken);
+    const sigBuf = Buffer.from(signature);
+    let isValid = false;
+    try {
+      isValid =
+        tokenBuf.length === sigBuf.length && timingSafeEqual(tokenBuf, sigBuf);
+    } catch {
+      isValid = false;
+    }
 
     if (!isValid) {
       this.logger.warn('Xendit webhook token mismatch');

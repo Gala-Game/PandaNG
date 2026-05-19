@@ -43,8 +43,8 @@ export class PayMongoAdapter implements PaymentAdapter {
   private readonly webhookSecret: string;
 
   constructor(private readonly config: ConfigService) {
-    this.secretKey = config.get<string>('PAYMONGO_SECRET_KEY') ?? 'sk_test_placeholder';
-    this.webhookSecret = config.get<string>('PAYMONGO_WEBHOOK_SECRET') ?? 'wh_secret_placeholder';
+    this.secretKey = config.getOrThrow<string>('PAYMONGO_SECRET_KEY');
+    this.webhookSecret = config.getOrThrow<string>('PAYMONGO_WEBHOOK_SECRET');
   }
 
   async initiatePayment(params: PaymentInitiateParams): Promise<PaymentInitiateResult> {

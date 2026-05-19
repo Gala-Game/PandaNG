@@ -288,3 +288,187 @@ spec:
   ports:
     - port: 3000
       targetPort: 3000
+
+---
+# ─── Admin Dashboard ──────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-dashboard
+  namespace: pandang
+  labels:
+    app: admin-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-dashboard
+  template:
+    metadata:
+      labels:
+        app: admin-dashboard
+    spec:
+      containers:
+        - name: admin-dashboard
+          image: ghcr.io/gala-game/pandang-admin-dashboard:latest
+          ports:
+            - containerPort: 3010
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          envFrom:
+            - configMapRef:
+                name: pandang-config
+          env:
+            - name: PORT
+              value: "3010"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3010
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-dashboard
+  namespace: pandang
+spec:
+  selector:
+    app: admin-dashboard
+  ports:
+    - port: 3010
+      targetPort: 3010
+
+---
+# ─── Jackpot Service ──────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jackpot
+  namespace: pandang
+  labels:
+    app: jackpot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jackpot
+  template:
+    metadata:
+      labels:
+        app: jackpot
+    spec:
+      containers:
+        - name: jackpot
+          image: ghcr.io/gala-game/pandang-jackpot:latest
+          ports:
+            - containerPort: 3003
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          envFrom:
+            - configMapRef:
+                name: pandang-config
+            - secretRef:
+                name: pandang-secrets
+          env:
+            - name: PORT
+              value: "3003"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jackpot
+  namespace: pandang
+spec:
+  selector:
+    app: jackpot
+  ports:
+    - port: 3003
+      targetPort: 3003
+
+---
+# ─── Admin API Service ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-api
+  namespace: pandang
+  labels:
+    app: admin-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin-api
+  template:
+    metadata:
+      labels:
+        app: admin-api
+    spec:
+      containers:
+        - name: admin-api
+          image: ghcr.io/gala-game/pandang-admin-api:latest
+          ports:
+            - containerPort: 3008
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          envFrom:
+            - configMapRef:
+                name: pandang-config
+            - secretRef:
+                name: pandang-secrets
+          env:
+            - name: PORT
+              value: "3008"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3008
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3008
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-api
+  namespace: pandang
+spec:
+  selector:
+    app: admin-api
+  ports:
+    - port: 3008
+      targetPort: 3008

@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -12,6 +13,8 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
+    // Disable body parser for webhook routes so we can access rawBody
+    bodyParser: false,
   });
 
   const configService = app.get(ConfigService);
@@ -19,6 +22,19 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
 
   app.use(helmet());
+
+  // Capture raw body for webhook signature verification, then parse JSON for all other routes
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith('/api/v1/wallet/webhook/')) {
+      express.raw({ type: '*/*' })(req, res, (err) => {
+        if (err) return next(err);
+        (req as express.Request & { rawBody: Buffer }).rawBody = req.body as Buffer;
+        next();
+      });
+    } else {
+      express.json()(req, res, next);
+    }
+  });
 
   const corsOrigins = (configService.get<string>('CORS_ORIGINS') ?? 'http://localhost:3000')
     .split(',')
