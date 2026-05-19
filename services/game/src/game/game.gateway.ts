@@ -59,7 +59,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.debug(`Client disconnected: ${client.id} | Total: ${this.connectedClients}`);
   }
 
-  /** Player joins their personal room — room is derived from the verified JWT, not the payload */
+  /**
+   * Explicit re-join handler — useful if a client loses its room membership after a
+   * brief disconnect/reconnect without a full socket teardown (e.g. transport upgrade).
+   * On a clean connect, the room is already joined automatically in handleConnection.
+   */
   @SubscribeMessage('join:user')
   handleJoinUser(@ConnectedSocket() client: AuthenticatedSocket): void {
     if (!client.userId) {

@@ -23,7 +23,9 @@ async function bootstrap(): Promise<void> {
 
   app.use(helmet());
 
-  // Capture raw body for webhook signature verification, then parse JSON for all other routes
+  // Capture raw body for webhook signature verification, then parse JSON for all other routes.
+  // NestJS is created with `bodyParser: false` so this is the ONLY body-parsing middleware —
+  // no double-parsing can occur.
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path.startsWith('/api/v1/wallet/webhook/')) {
       express.raw({ type: '*/*' })(req, res, (err) => {

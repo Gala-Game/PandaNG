@@ -32,7 +32,8 @@ export function computeCrashPoint(serverSeed: string, nonce: number): number {
   if (h % BUST_MODULO === 0) return 1.0;
 
   const hMod = h % MAX;
-  // When hMod === 0 the divisor would be zero — treat as a near-infinite multiplier capped at max payout
+  // hMod === 0 when h equals exactly MAX (2^52 - 1). That case is not caught by the BUST_MODULO
+  // check above because MAX % BUST_MODULO is not zero. Cap at 100× to avoid division by zero.
   if (hMod === 0) return 100.0;
 
   const e = MAX / hMod;

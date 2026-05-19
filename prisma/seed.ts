@@ -9,7 +9,9 @@ import { createHash } from 'crypto';
 const prisma = new PrismaClient();
 
 function hashPassword(plain: string): string {
-  // In production this would be bcrypt/argon2; for seeding we use SHA256
+  // NOTE: SHA-256 is intentionally used here ONLY for seeding demo/test users.
+  // Production passwords are hashed with bcrypt in the auth service (services/auth).
+  // This seed file must never run in production (guarded below).
   return createHash('sha256').update(plain + ':seed-salt').digest('hex');
 }
 

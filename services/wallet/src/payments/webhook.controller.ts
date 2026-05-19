@@ -6,6 +6,7 @@ import {
   Headers,
   Logger,
   BadRequestException,
+  NotFoundException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -117,7 +118,9 @@ export class WebhookController {
             where: { userId: payment.userId },
             select: { id: true, balanceInCents: true },
           });
-          if (!wallet) throw new Error(`Wallet not found for user ${payment.userId}`);
+          if (!wallet) {
+            throw new NotFoundException(`Wallet not found for user ${payment.userId}`);
+          }
 
           const balanceBefore = wallet.balanceInCents;
           const balanceAfter = balanceBefore + payment.amountInCents;
