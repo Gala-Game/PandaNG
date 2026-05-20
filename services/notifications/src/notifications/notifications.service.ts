@@ -100,7 +100,11 @@ export class NotificationsService {
     });
 
     for (const { token } of tokens) {
-      this.sendPush({ ...payload, token });
+      try {
+        this.sendPush({ ...payload, token });
+      } catch (error) {
+        this.logger.error('Failed to queue push notification', error);
+      }
     }
   }
 
