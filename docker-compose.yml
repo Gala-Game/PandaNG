@@ -228,6 +228,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       WALLET_SERVICE_URL: http://wallet:3002
       JACKPOT_SERVICE_URL: http://jackpot:3003
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-me-in-production}
       CORS_ORIGINS: http://localhost:3000,http://localhost:3010
     depends_on:
       postgres:

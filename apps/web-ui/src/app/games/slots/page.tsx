@@ -42,10 +42,16 @@ export default function SlotsPage() {
   const [result, setResult] = useState<{ wins: Array<{ lineId: number; multiplier: number; winInCents: string }>; totalWinInCents: string; isJackpotEligible: boolean } | null>(null);
   const [sessionInfo, setSessionInfo] = useState<{ serverSeedHash: string; clientSeed: string; nonce: number } | null>(null);
   const [error, setError] = useState('');
+  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
 
   const spin = useCallback(async () => {
     if (spinning || !isAuthenticated) return;
-    if (BigInt(betCents) > balanceInCents) { setError('Insufficient balance'); return; }
+    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
+    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
+      setError('Bet must be a whole number of cents');
+      return;
+    }
+    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
     setError('');
     setResult(null);
     setSpinning(true);
@@ -60,9 +66,9 @@ export default function SlotsPage() {
 
     try {
       // Start session
-      const session = await gameApi.startSession({ gameType: 'SLOTS', betAmountInCents: betCents });
+      const session = await gameApi.startSession({ gameType: 'SLOTS', betAmountInCents: safeBetCents });
       setSessionInfo({ serverSeedHash: session.serverSeedHash, clientSeed: session.clientSeed, nonce: session.nonce });
-      subtractBet(BigInt(betCents));
+      subtractBet(BigInt(safeBetCents));
 
       // Wait for animation (1.5s)
       await new Promise((r) => setTimeout(r, 1500));
@@ -183,18 +189,19 @@ export default function SlotsPage() {
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={10}
-              max={10_000_000}
-              value={betCents}
-              onChange={(e) => setBetCents(Number(e.target.value))}
-              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm focus:border-gold/50 focus:outline-none"
-              placeholder="Bet (cents)"
-            />
-            <span className="text-sm text-gray-400">{formatPHP(BigInt(betCents))}</span>
-          </div>
-        </GlassCard>
+             <input
+               type="number"
+               min={10}
+               max={10_000_000}
+               step={1}
+               value={betCents}
+               onChange={(e) => setBetCents(Number(e.target.value))}
+               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm focus:border-gold/50 focus:outline-none"
+               placeholder="Bet (cents)"
+             />
+             <span className="text-sm text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</span>
+           </div>
+         </GlassCard>
 
         {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
 

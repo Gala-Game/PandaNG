@@ -40,7 +40,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = (resp['message'] as string | string[]) ?? exception.message;
         error = (resp['error'] as string) ?? exception.name;
       } else {
-        message = exceptionResponse as unknown as string;
+        message = String(exceptionResponse);
         error = exception.name;
       }
     }

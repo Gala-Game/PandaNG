@@ -7,12 +7,15 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  InternalServerErrorException,
   Injectable,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
 import { IsString, IsOptional, IsNumberString, IsEnum, Matches } from 'class-validator';
+import { TransactionType } from '@prisma/client';
 
 /** Allowed transaction types for internal service-to-service calls */
 enum InternalTransactionType {
@@ -51,12 +54,14 @@ class InternalTransactionDto {
  */
 @Injectable()
 class InternalApiKeyGuard implements CanActivate {
+  constructor(private readonly configService: ConfigService) {}
+
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<{ headers: Record<string, string | undefined> }>();
     const key = req.headers['x-internal-api-key'];
-    const expected = process.env['INTERNAL_API_KEY'];
+    const expected = this.configService.get<string>('INTERNAL_API_KEY');
     if (!expected) {
-      throw new UnauthorizedException('INTERNAL_API_KEY is not configured');
+      throw new InternalServerErrorException('INTERNAL_API_KEY is not configured');
     }
     if (!key || key !== expected) {
       throw new UnauthorizedException('Invalid internal API key');
@@ -75,6 +80,25 @@ class InternalApiKeyGuard implements CanActivate {
 export class InternalWalletController {
   constructor(private readonly walletService: WalletService) {}
 
+  private mapInternalType(type: InternalTransactionType): TransactionType {
+    switch (type) {
+      case InternalTransactionType.BET:
+        return TransactionType.BET;
+      case InternalTransactionType.WIN:
+        return TransactionType.WIN;
+      case InternalTransactionType.BONUS:
+        return TransactionType.BONUS;
+      case InternalTransactionType.REFUND:
+        return TransactionType.REFUND;
+      case InternalTransactionType.JACKPOT_WIN:
+        return TransactionType.JACKPOT_WIN;
+      case InternalTransactionType.MISSION_REWARD:
+        return TransactionType.MISSION_REWARD;
+      default:
+        throw new UnauthorizedException('Invalid transaction type');
+    }
+  }
+
   @Post('debit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Internal: debit wallet (service-to-service)' })
@@ -83,7 +107,7 @@ export class InternalWalletController {
     const entry = await this.walletService.debit(
       dto.userId,
       amount,
-      dto.type as never,
+      this.mapInternalType(dto.type),
       dto.reference,
       dto.description,
     );
@@ -104,7 +128,7 @@ export class InternalWalletController {
     const entry = await this.walletService.credit(
       dto.userId,
       amount,
-      dto.type as never,
+      this.mapInternalType(dto.type),
       dto.reference,
       dto.description,
     );

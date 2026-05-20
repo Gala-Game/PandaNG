@@ -26,13 +26,19 @@ export default function DicePage() {
   const [won, setWon] = useState<boolean | null>(null);
   const [winAmount, setWinAmount] = useState<bigint>(0n);
   const [error, setError] = useState('');
+  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
 
   const payout = calcPayout(target, isOver);
   const chance = isOver ? 100 - target : target;
 
   const bet = useCallback(async () => {
     if (spinning || !isAuthenticated) return;
-    if (BigInt(betCents) > balanceInCents) { setError('Insufficient balance'); return; }
+    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
+    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
+      setError('Bet must be a whole number of cents');
+      return;
+    }
+    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
     setError('');
     setSpinning(true);
     setRoll(null);
@@ -44,8 +50,8 @@ export default function DicePage() {
     }, 50);
 
     try {
-      const session = await gameApi.startSession({ gameType: 'DRAGON_DICE', betAmountInCents: betCents });
-      subtractBet(BigInt(betCents));
+      const session = await gameApi.startSession({ gameType: 'DRAGON_DICE', betAmountInCents: safeBetCents });
+      subtractBet(BigInt(safeBetCents));
       await new Promise((r) => setTimeout(r, 800));
       clearInterval(animInterval);
       const res = await gameApi.resolveSession(session.sessionId, { target, isOver });
@@ -152,12 +158,13 @@ export default function DicePage() {
             <input
               type="number"
               min={10}
+              step={1}
               value={betCents}
               onChange={(e) => setBetCents(Number(e.target.value))}
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
               placeholder="Bet (cents)"
             />
-            <span className="text-sm text-gray-400">{formatPHP(BigInt(betCents))}</span>
+            <span className="text-sm text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</span>
           </div>
         </GlassCard>
 

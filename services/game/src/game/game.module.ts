@@ -13,7 +13,7 @@ import { GameGateway } from './game.gateway';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({
-        secret: cfg.get<string>('JWT_SECRET') ?? 'dev-secret',
+        secret: cfg.getOrThrow<string>('JWT_SECRET'),
       }),
     }),
   ],

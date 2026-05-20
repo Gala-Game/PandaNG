@@ -31,6 +31,7 @@ export default function CrashPage() {
   const [result, setResult] = useState<{ cashedOut: boolean; multiplier: number; crashPoint: number; winInCents: string } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
 
@@ -55,15 +56,20 @@ export default function CrashPage() {
 
   const placeBet = useCallback(async () => {
     if (!isAuthenticated || loading) return;
-    if (BigInt(betCents) > balanceInCents) { setError('Insufficient balance'); return; }
+    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
+    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
+      setError('Bet must be a whole number of cents');
+      return;
+    }
+    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
     setError('');
     setLoading(true);
     setResult(null);
     setMultiplier(1.0);
     try {
-      const session = await gameApi.startSession({ gameType: 'CRASH', betAmountInCents: betCents });
+      const session = await gameApi.startSession({ gameType: 'CRASH', betAmountInCents: safeBetCents });
       setSessionId(session.sessionId);
-      subtractBet(BigInt(betCents));
+      subtractBet(BigInt(safeBetCents));
       setPhase('running');
     } catch {
       setError('Failed to start game');
@@ -159,12 +165,14 @@ export default function CrashPage() {
           <input
             type="number"
             min={10}
+            step={1}
             value={betCents}
             onChange={(e) => setBetCents(Number(e.target.value))}
             disabled={phase === 'running'}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50"
             placeholder="Bet (cents)"
           />
+          <div className="mt-2 text-right text-xs text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</div>
         </GlassCard>
 
         {error && <p className="mb-3 text-sm text-red-400">{error}</p>}

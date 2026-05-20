@@ -32,6 +32,7 @@ export class GameService {
   private readonly logger = new Logger(GameService.name);
   private readonly walletUrl: string;
   private readonly jackpotUrl: string;
+  private readonly internalApiKey: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -40,6 +41,7 @@ export class GameService {
   ) {
     this.walletUrl = this.config.get<string>('WALLET_SERVICE_URL') ?? 'http://localhost:3002';
     this.jackpotUrl = this.config.get<string>('JACKPOT_SERVICE_URL') ?? 'http://localhost:3003';
+    this.internalApiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 
   async startSession(userId: string, dto: StartGameDto) {
@@ -69,13 +71,17 @@ export class GameService {
     const reference = `GAME-${Date.now()}-${userId.slice(-6)}`;
     try {
       await firstValueFrom(
-        this.http.post(`${this.walletUrl}/api/v1/internal/debit`, {
-          userId,
-          amountInCents: dto.betAmountInCents.toString(),
-          type: 'BET',
-          reference,
-          description: `${dto.gameType} bet`,
-        }),
+        this.http.post(
+          `${this.walletUrl}/api/v1/internal/debit`,
+          {
+            userId,
+            amountInCents: dto.betAmountInCents.toString(),
+            type: 'BET',
+            reference,
+            description: `${dto.gameType} bet`,
+          },
+          { headers: { 'X-Internal-Api-Key': this.internalApiKey } },
+        ),
       );
     } catch (err) {
       this.logger.error('Wallet debit failed', err);
@@ -88,21 +94,44 @@ export class GameService {
     const clientSeed = dto.clientSeed ?? generateClientSeed();
 
     // Create game session (serverSeed stored encrypted, only hash exposed)
-    const session = await this.prisma.gameSession.create({
-      data: {
-        userId,
-        gameType: dto.gameType as any,
-        betAmountInCents: betInCents,
-        winAmountInCents: 0n,
-        rtpProfileId: rtpProfile.id,
-        seed: reference,
-        serverSeed, // stored but not returned until resolution
-        serverSeedHash,
-        clientSeed,
-        nonce: 0,
-        status: SESSION_STATUS.STARTED,
-      },
-    });
+    let session;
+    try {
+      session = await this.prisma.gameSession.create({
+        data: {
+          userId,
+          gameType: dto.gameType as any,
+          betAmountInCents: betInCents,
+          winAmountInCents: 0n,
+          rtpProfileId: rtpProfile.id,
+          seed: reference,
+          serverSeed, // stored but not returned until resolution
+          serverSeedHash,
+          clientSeed,
+          nonce: 0,
+          status: SESSION_STATUS.STARTED,
+        },
+      });
+    } catch (err) {
+      this.logger.error('Session creation failed after wallet debit, issuing compensating refund', err);
+      try {
+        await firstValueFrom(
+          this.http.post(
+            `${this.walletUrl}/api/v1/internal/credit`,
+            {
+              userId,
+              amountInCents: dto.betAmountInCents.toString(),
+              type: 'REFUND',
+              reference: `REFUND-${reference}`,
+              description: `${dto.gameType} bet refund`,
+            },
+            { headers: { 'X-Internal-Api-Key': this.internalApiKey } },
+          ),
+        );
+      } catch (refundErr) {
+        this.logger.error('Compensating wallet refund failed', refundErr);
+      }
+      throw err;
+    }
 
     this.logger.log(`Session started: ${session.id} user=${userId} game=${dto.gameType} bet=${betInCents}`);
 
@@ -187,13 +216,17 @@ export class GameService {
       const winReference = `WIN-${sessionId}`;
       try {
         await firstValueFrom(
-          this.http.post(`${this.walletUrl}/api/v1/internal/credit`, {
-            userId,
-            amountInCents: winInCents.toString(),
-            type: 'WIN',
-            reference: winReference,
-            description: `${gameType} win`,
-          }),
+          this.http.post(
+            `${this.walletUrl}/api/v1/internal/credit`,
+            {
+              userId,
+              amountInCents: winInCents.toString(),
+              type: 'WIN',
+              reference: winReference,
+              description: `${gameType} win`,
+            },
+            { headers: { 'X-Internal-Api-Key': this.internalApiKey } },
+          ),
         );
       } catch (err) {
         this.logger.error(`CRITICAL: Failed to credit win for session ${sessionId}`, err);

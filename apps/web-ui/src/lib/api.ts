@@ -18,7 +18,7 @@ function createClient(baseURL: string) {
   client.interceptors.response.use(
     (r) => r,
     async (error) => {
-      if (error.response?.status === 401) {
+      if (error.response?.status === 401 && typeof window !== 'undefined') {
         const refresh = localStorage.getItem('refreshToken');
         if (refresh) {
           try {
@@ -26,6 +26,9 @@ function createClient(baseURL: string) {
             const { accessToken, refreshToken: newRefresh } = res.data.data;
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', newRefresh);
+            if (!error.config.headers) {
+              error.config.headers = {};
+            }
             error.config.headers.Authorization = `Bearer ${accessToken}`;
             return client.request(error.config);
           } catch {

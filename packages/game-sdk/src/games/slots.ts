@@ -150,7 +150,7 @@ export function getSlotsResult(
   const totalWinInCents = wins.reduce((sum, w) => sum + w.winInCents, 0n);
   const multiplier = wins.reduce((sum, w) => sum + w.multiplier, 0);
 
-  // Jackpot eligible: 5 Panda symbols on payline 1 (middle row)
+  // Jackpot eligible: any 5 Panda symbols on any payline
   const isJackpotEligible = wins.some((w) => w.symbols[0] === '🐼' && w.count === 5);
 
   return { reels, wins, totalWinInCents, multiplier, isJackpotEligible };

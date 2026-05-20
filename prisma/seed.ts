@@ -5,6 +5,8 @@ const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
   console.log('🐼 Seeding PandaNG database...');
+  const adminPassword = process.env['SEED_ADMIN_PASSWORD'] ?? 'dev-admin-password-change-me';
+  const playerPassword = process.env['SEED_PLAYER_PASSWORD'] ?? 'dev-player-password-change-me';
 
   // ── Jackpots ──────────────────────────────────────────────────────────────
   const jackpots = [
@@ -59,7 +61,7 @@ async function main(): Promise<void> {
   console.log('✅ RTP Profiles seeded');
 
   // ── Admin user ────────────────────────────────────────────────────────────
-  const adminHash = await bcrypt.hash('Admin@PandaNG2024!', 12);
+  const adminHash = await bcrypt.hash(adminPassword, 12);
   await prisma.user.upsert({
     where: { email: 'admin@pandang.com' },
     create: {
@@ -78,7 +80,7 @@ async function main(): Promise<void> {
   console.log('✅ Admin user seeded — admin@pandang.com (see .env.example for seed credentials)');
 
   // ── Demo player ───────────────────────────────────────────────────────────
-  const playerHash = await bcrypt.hash('Player@PandaNG2024!', 12);
+  const playerHash = await bcrypt.hash(playerPassword, 12);
   await prisma.user.upsert({
     where: { email: 'player@pandang.com' },
     create: {
