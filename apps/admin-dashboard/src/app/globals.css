@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neon-cyan: #00ffff;
+  --neon-pink: #ff007f;
+  --neon-green: #39ff14;
+  --gold: #ffd700;
+  --deep-black: #0a0a0f;
+}
+
+@layer base {
+  html { @apply bg-deep-black text-panda-white; }
+  body { @apply font-body antialiased; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-deep-black; }
+  ::-webkit-scrollbar-thumb { @apply bg-neon-cyan/30 rounded-full; }
+}
+
+@layer components {
+  .neon-text-cyan { @apply text-neon-cyan drop-shadow-[0_0_10px_rgba(0,255,255,0.8)]; }
+  .neon-text-gold { @apply text-gold drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]; }
+  .glass-card { @apply bg-dark-card/80 backdrop-blur-md border border-dark-border rounded-2xl; }
+  .admin-btn {
+    @apply px-4 py-2 rounded-lg font-heading font-bold text-sm transition-all active:scale-95;
+  }
+}

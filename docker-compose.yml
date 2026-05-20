@@ -211,6 +211,46 @@ services:
     networks:
       - panda-ng-network
 
+  game:
+    build:
+      context: .
+      dockerfile: services/game/Dockerfile
+    container_name: pandang-game
+    restart: unless-stopped
+    ports:
+      - '3009:3009'
+    env_file:
+      - .env
+    environment:
+      PORT: 3009
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
+  admin-dashboard:
+    build:
+      context: .
+      dockerfile: apps/admin-dashboard/Dockerfile
+    container_name: pandang-admin-dashboard
+    restart: unless-stopped
+    ports:
+      - '3010:3010'
+    env_file:
+      - .env
+    environment:
+      PORT: 3010
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panda-ng-network
+
   # ── Apps ────────────────────────────────────────────────────────────────────
 
   web-ui:
