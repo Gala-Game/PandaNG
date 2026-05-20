@@ -99,10 +99,12 @@ export class NotificationsService {
       select: { token: true },
     });
 
-    await Promise.all(tokens.map(({ token }) => this.sendPush({ ...payload, token })));
+    for (const { token } of tokens) {
+      this.sendPush({ ...payload, token });
+    }
   }
 
-  private async sendPush(payload: PushPayload): Promise<void> {
+  private sendPush(payload: PushPayload): void {
     const firebaseProjectId = process.env['FIREBASE_PROJECT_ID'];
     if (!firebaseProjectId) {
       this.logger.warn('Firebase not configured — skipping push notification');

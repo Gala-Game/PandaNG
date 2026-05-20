@@ -19,6 +19,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "env": ["DATABASE_URL", "REDIS_URL", "JWT_SECRET", "NODE_ENV", "INTERNAL_API_KEY"],
       "inputs": ["$TURBO_DEFAULT$", ".env.test*"],
       "outputs": ["coverage/**"]
     },

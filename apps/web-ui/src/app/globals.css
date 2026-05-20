@@ -8,6 +8,8 @@
   --neon-green: #39ff14;
   --gold: #ffd700;
   --deep-black: #0a0a0f;
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-rajdhani: 'Rajdhani', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 @layer base {

@@ -8,6 +8,12 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 
+interface JwtPayload {
+  sub: string;
+  email?: string;
+  role?: string;
+}
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -27,7 +33,7 @@ export class JwtAuthGuard implements CanActivate {
       if (!secret) {
         throw new UnauthorizedException('JWT_SECRET is not configured');
       }
-      const payload = this.jwtService.verify(token, { secret });
+      const payload = this.jwtService.verify<JwtPayload>(token, { secret });
       request.user = payload;
       return true;
     } catch {

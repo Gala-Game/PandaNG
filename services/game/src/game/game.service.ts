@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { GameType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { StartGameDto, GameTypeDto } from './dto/start-game.dto';
+import { StartGameDto } from './dto/start-game.dto';
 import { ResolveGameDto } from './dto/resolve-game.dto';
 import {
   generateServerSeed,
@@ -55,7 +56,7 @@ export class GameService {
 
     // Find active RTP profile for this game type
     const rtpProfile = await this.prisma.rTPProfile.findFirst({
-      where: { gameType: dto.gameType as any, isActive: true },
+      where: { gameType: dto.gameType as GameType, isActive: true },
     });
     if (!rtpProfile) throw new NotFoundException('No active RTP profile for this game');
 
@@ -99,7 +100,7 @@ export class GameService {
       session = await this.prisma.gameSession.create({
         data: {
           userId,
-          gameType: dto.gameType as any,
+          gameType: dto.gameType as GameType,
           betAmountInCents: betInCents,
           winAmountInCents: 0n,
           rtpProfileId: rtpProfile.id,
@@ -296,10 +297,11 @@ export class GameService {
   }
 
   async getRTPProfiles(gameType?: string) {
+    const gameTypeFilter = gameType ? (gameType as GameType) : undefined;
     const profiles = await this.prisma.rTPProfile.findMany({
       where: {
         isActive: true,
-        ...(gameType ? { gameType: gameType as any } : {}),
+        ...(gameTypeFilter ? { gameType: gameTypeFilter } : {}),
       },
       orderBy: { gameType: 'asc' },
     });
