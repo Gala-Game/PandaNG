@@ -56,17 +56,23 @@ export default function SpinWheelPage() {
   const [rotation, setRotation] = useState(0);
   const [result, setResult] = useState<{ segmentIndex: number; segment: { label: string; multiplier: number }; winInCents: string } | null>(null);
   const [error, setError] = useState('');
+  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
 
   const spin = useCallback(async () => {
     if (spinning || !isAuthenticated) return;
-    if (BigInt(betCents) > balanceInCents) { setError('Insufficient balance'); return; }
+    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
+    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
+      setError('Bet must be a whole number of cents');
+      return;
+    }
+    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
     setError('');
     setSpinning(true);
     setResult(null);
 
     try {
-      const session = await gameApi.startSession({ gameType: 'PANDA_SPIN', betAmountInCents: betCents });
-      subtractBet(BigInt(betCents));
+      const session = await gameApi.startSession({ gameType: 'PANDA_SPIN', betAmountInCents: safeBetCents });
+      subtractBet(BigInt(safeBetCents));
 
       // Pre-animate for 2s
       const extraSpins = 5 * 360 + Math.random() * 360;
@@ -149,12 +155,13 @@ export default function SpinWheelPage() {
             <input
               type="number"
               min={10}
+              step={1}
               value={betCents}
               onChange={(e) => setBetCents(Number(e.target.value))}
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
               placeholder="Bet (cents)"
             />
-            <span className="text-sm text-gray-400">{formatPHP(BigInt(betCents))}</span>
+            <span className="text-sm text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</span>
           </div>
         </GlassCard>
 
