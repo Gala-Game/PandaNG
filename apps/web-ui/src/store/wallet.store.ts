@@ -14,7 +14,7 @@ interface WalletState {
   subtractBet: (amountInCents: bigint) => void;
 }
 
-export const useWalletStore = create<WalletState>()((set, get) => ({
+export const useWalletStore = create<WalletState>()((set) => ({
   balanceInCents: 0n,
   bonusBalanceInCents: 0n,
   currency: 'PHP',

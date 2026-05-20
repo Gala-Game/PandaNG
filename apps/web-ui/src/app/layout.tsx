@@ -1,15 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Rajdhani } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/Providers';
 import { Navbar } from '@/components/layout/Navbar';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const rajdhani = Rajdhani({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-rajdhani',
-});
 
 export const metadata: Metadata = {
   title: { template: '%s | Panda NG', default: 'Panda NG — Luxury Jackpot Gaming' },
@@ -27,10 +19,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${rajdhani.variable}`}>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-      </head>
+    <html lang="en">
       <body className="font-body bg-deep-black text-panda-white min-h-screen">
         <Providers>
           <Navbar />
@@ -40,4 +29,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-

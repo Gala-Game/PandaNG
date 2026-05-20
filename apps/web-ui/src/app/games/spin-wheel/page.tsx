@@ -31,7 +31,6 @@ function Wheel({ rotation }: { rotation: number }) {
         const endAngle = startAngle + SLICE;
         const s = (a: number) => ({ x: cx + r * Math.cos((a * Math.PI) / 180), y: cy + r * Math.sin((a * Math.PI) / 180) });
         const start = s(startAngle), end = s(endAngle);
-        const mid = s(startAngle + SLICE / 2);
         const d = `M${cx},${cy} L${start.x},${start.y} A${r},${r} 0 0,1 ${end.x},${end.y} Z`;
         return (
           <g key={i} style={{ transform: `rotate(${rotation}deg)`, transformOrigin: '100px 100px' }}>
