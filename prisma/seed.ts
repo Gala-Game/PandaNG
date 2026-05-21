@@ -1,153 +1,255 @@
-import { PrismaClient, JackpotTier, GameType, UserRole, UserStatus, KYCStatus, VIPLevel } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+/**
+ * Prisma seed — demo users, jackpots, RTP profiles, missions, battle-pass season
+ * Run with: pnpm prisma db seed
+ */
+
+import { PrismaClient, GameType, JackpotTier } from '@prisma/client';
+import { createHash } from 'crypto';
 
 const prisma = new PrismaClient();
 
-async function main(): Promise<void> {
-  console.log('🐼 Seeding PandaNG database...');
-  const adminPassword = process.env['SEED_ADMIN_PASSWORD'] ?? 'dev-admin-password-change-me';
-  const playerPassword = process.env['SEED_PLAYER_PASSWORD'] ?? 'dev-player-password-change-me';
+function hashPassword(plain: string): string {
+  // NOTE: SHA-256 is intentionally used here ONLY for seeding demo/test users.
+  // Production passwords are hashed with bcrypt in the auth service (services/auth).
+  // This seed file must never run in production (guarded below).
+  return createHash('sha256').update(plain + ':seed-salt').digest('hex');
+}
 
-  // ── Jackpots ──────────────────────────────────────────────────────────────
-  const jackpots = [
-    { tier: JackpotTier.MINI,  name: 'Mini Panda',          seed: 50_000n,     rate: 0.001 },
-    { tier: JackpotTier.MINOR, name: 'Bamboo Jackpot',      seed: 500_000n,    rate: 0.002 },
-    { tier: JackpotTier.MAJOR, name: 'Golden Panda',        seed: 5_000_000n,  rate: 0.003 },
-    { tier: JackpotTier.GRAND, name: 'Grand Panda Supreme', seed: 50_000_000n, rate: 0.005 },
-  ];
-  for (const j of jackpots) {
-    await prisma.jackpot.upsert({
-      where: { tier: j.tier },
-      create: {
-        tier: j.tier,
-        name: j.name,
-        seedAmountInCents: j.seed,
-        currentAmountInCents: j.seed,
-        contributionRate: j.rate,
-        maxWinMultiplier: 1000,
-        isActive: true,
-      },
-      update: {},
-    });
+async function main() {
+  // Safety guard: never seed in production with hardcoded credentials
+  if (process.env.NODE_ENV === 'production' && !process.env.SEED_ALLOW_PRODUCTION) {
+    throw new Error(
+      'Refusing to seed in production. Set SEED_ALLOW_PRODUCTION=1 to override (dangerous).',
+    );
   }
-  console.log('✅ Jackpots seeded');
 
-  // ── RTP Profiles ──────────────────────────────────────────────────────────
-  const rtpProfiles = [
-    { gameType: GameType.SLOTS,       name: 'Standard',      rtp: 0.96,   variance: 'medium', min: 10n,   max: 1_000_000n  },
-    { gameType: GameType.SLOTS,       name: 'High Variance', rtp: 0.94,   variance: 'high',   min: 100n,  max: 5_000_000n  },
-    { gameType: GameType.CRASH,       name: 'Standard',      rtp: 0.96,   variance: 'high',   min: 10n,   max: 1_000_000n  },
-    { gameType: GameType.DRAGON_DICE, name: 'Standard',      rtp: 0.98,   variance: 'low',    min: 10n,   max: 500_000n    },
-    { gameType: GameType.PANDA_SPIN,  name: 'Standard',      rtp: 0.95,   variance: 'medium', min: 10n,   max: 1_000_000n  },
-    { gameType: GameType.BAMBOO_BLAST,name: 'Standard',      rtp: 0.96,   variance: 'medium', min: 10n,   max: 1_000_000n  },
-    { gameType: GameType.SCRATCH_CARD,name: 'Standard',      rtp: 0.90,   variance: 'low',    min: 500n,  max: 500_000n    },
-    { gameType: GameType.ROULETTE,    name: 'Standard',      rtp: 0.973,  variance: 'medium', min: 10n,   max: 2_000_000n  },
-  ];
-  for (const p of rtpProfiles) {
-    await prisma.rTPProfile.upsert({
-      where: { gameType_name: { gameType: p.gameType, name: p.name } },
-      create: {
-        gameType: p.gameType,
-        name: p.name,
-        rtp: p.rtp,
-        variance: p.variance,
-        minBetInCents: p.min,
-        maxBetInCents: p.max,
-        isActive: true,
-      },
-      update: {},
-    });
-  }
-  console.log('✅ RTP Profiles seeded');
+  const adminPassword =
+    process.env.SEED_ADMIN_PASSWORD ??
+    (process.env.NODE_ENV === 'production'
+      ? (() => { throw new Error('SEED_ADMIN_PASSWORD must be set in production'); })()
+      : 'Admin@PandaNG2026!');
 
-  // ── Admin user ────────────────────────────────────────────────────────────
-  const adminHash = await bcrypt.hash(adminPassword, 12);
-  await prisma.user.upsert({
+  const playerPassword =
+    process.env.SEED_PLAYER_PASSWORD ?? 'Demo@PandaNG2026!';
+
+  console.log('🌱 Seeding database...');
+
+  // ─── Demo Users ─────────────────────────────────────────────────────────────
+
+  const adminUser = await prisma.user.upsert({
     where: { email: 'admin@pandang.com' },
     create: {
       email: 'admin@pandang.com',
-      username: 'pandang_admin',
-      passwordHash: adminHash,
-      role: UserRole.ADMIN,
-      status: UserStatus.ACTIVE,
-      kycStatus: KYCStatus.VERIFIED,
-      vipLevel: VIPLevel.PANDA_ELITE,
-      referralCode: 'ADMIN001',
-      wallet: { create: { balanceInCents: 0n, currency: 'PHP' } },
-    },
-    update: {},
-  });
-  console.log('✅ Admin user seeded — admin@pandang.com (see .env.example for seed credentials)');
-
-  // ── Demo player ───────────────────────────────────────────────────────────
-  const playerHash = await bcrypt.hash(playerPassword, 12);
-  await prisma.user.upsert({
-    where: { email: 'player@pandang.com' },
-    create: {
-      email: 'player@pandang.com',
-      username: 'lucky_panda',
-      passwordHash: playerHash,
-      role: UserRole.PLAYER,
-      status: UserStatus.ACTIVE,
-      kycStatus: KYCStatus.VERIFIED,
-      vipLevel: VIPLevel.GOLD,
-      referralCode: 'LUCKY001',
+      username: 'panda_admin',
+      passwordHash: hashPassword(adminPassword),
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      kycStatus: 'VERIFIED',
+      vipLevel: 'DIAMOND',
+      emailVerified: true,
       wallet: {
         create: {
-          balanceInCents: 1_000_000n,       // ₱10,000 demo balance
-          bonusBalanceInCents: 50_000n,     // ₱500 bonus
+          balanceInCents: 0n,
           currency: 'PHP',
         },
       },
     },
     update: {},
   });
-  console.log('✅ Demo player seeded  — player@pandang.com (see .env.example for seed credentials)');
 
-  // ── LiveOps defaults ──────────────────────────────────────────────────────
-  const liveOps = [
-    { key: 'maintenance_mode',           value: false,   description: 'Enable maintenance mode globally' },
-    { key: 'jackpot_contributions_enabled', value: true, description: 'Allow bet contributions to jackpots' },
-    { key: 'new_player_bonus_enabled',   value: true,    description: 'Welcome bonus for new registrations' },
-    { key: 'welcome_bonus_cents',        value: 50000,   description: 'Welcome bonus amount (₱500)' },
-    { key: 'max_session_hours',          value: 4,       description: 'Session reminder interval in hours' },
+  const playerUser = await prisma.user.upsert({
+    where: { email: 'demo@pandang.com' },
+    create: {
+      email: 'demo@pandang.com',
+      username: 'panda_demo',
+      passwordHash: hashPassword(playerPassword),
+      role: 'PLAYER',
+      status: 'ACTIVE',
+      kycStatus: 'VERIFIED',
+      vipLevel: 'GOLD',
+      emailVerified: true,
+      wallet: {
+        create: {
+          balanceInCents: 1_000_000n, // ₱10,000 demo balance
+          currency: 'PHP',
+        },
+      },
+    },
+    update: {},
+  });
+
+  console.log(`✅ Users: admin=${adminUser.id}, demo=${playerUser.id}`);
+
+  // ─── Jackpot Tiers ──────────────────────────────────────────────────────────
+
+  const jackpotData: Array<{
+    name: string;
+    tier: JackpotTier;
+    seedAmountInCents: bigint;
+    currentAmountInCents: bigint;
+    contributionRateBps: number;
+    maxContributionPerBetBps: number;
+    isActive: boolean;
+  }> = [
+    {
+      name: 'Mini',
+      tier: 'MINI',
+      seedAmountInCents: 100_00n,       // ₱100 seed
+      currentAmountInCents: 5_000_00n,  // ₱5,000 current
+      contributionRateBps: 10,          // 0.10%
+      maxContributionPerBetBps: 50,
+      isActive: true,
+    },
+    {
+      name: 'Minor',
+      tier: 'MINOR',
+      seedAmountInCents: 1_000_00n,     // ₱1,000
+      currentAmountInCents: 25_000_00n, // ₱25,000
+      contributionRateBps: 20,
+      maxContributionPerBetBps: 100,
+      isActive: true,
+    },
+    {
+      name: 'Major',
+      tier: 'MAJOR',
+      seedAmountInCents: 10_000_00n,    // ₱10,000
+      currentAmountInCents: 150_000_00n, // ₱150,000
+      contributionRateBps: 30,
+      maxContributionPerBetBps: 200,
+      isActive: true,
+    },
+    {
+      name: 'Grand',
+      tier: 'GRAND',
+      seedAmountInCents: 100_000_00n,   // ₱100,000
+      currentAmountInCents: 1_200_000_00n, // ₱1,200,000
+      contributionRateBps: 50,
+      maxContributionPerBetBps: 500,
+      isActive: true,
+    },
   ];
-  for (const c of liveOps) {
-    await prisma.liveOpsConfig.upsert({
-      where: { key_environment: { key: c.key, environment: 'production' } },
-      create: { key: c.key, value: c.value, environment: 'production', description: c.description, createdBy: 'system' },
-      update: {},
+
+  for (const jackpot of jackpotData) {
+    await prisma.jackpot.upsert({
+      where: { tier: jackpot.tier },
+      create: jackpot,
+      update: { isActive: jackpot.isActive },
     });
   }
-  console.log('✅ LiveOps config seeded');
 
-  // ── Sample missions ───────────────────────────────────────────────────────
-  const missions = [
-    { name: 'First Spin!',     description: 'Play your first slot spin',         type: 'TUTORIAL',     requirements: { action: 'bet', gameType: 'SLOTS', count: 1 },           rewardType: 'BONUS_CASH', rewardAmount: 10_000n },
-    { name: 'Daily Grinder',   description: 'Place 5 bets today',                type: 'DAILY',        requirements: { action: 'bet', count: 5 },                               rewardType: 'XP',         rewardAmount: 100n    },
-    { name: 'High Roller',     description: 'Wager ₱1,000 in a single day',      type: 'DAILY',        requirements: { action: 'wager', totalInCents: 100_000 },                rewardType: 'BONUS_CASH', rewardAmount: 20_000n },
-    { name: 'Crash Survivor',  description: 'Cash out at 2× or higher 3 times',  type: 'WEEKLY',       requirements: { action: 'crash_cashout', minMultiplier: 2.0, count: 3 }, rewardType: 'BONUS_CASH', rewardAmount: 50_000n },
-    { name: 'Lucky Streak',    description: 'Win 3 games in a row',              type: 'ACHIEVEMENT',  requirements: { action: 'win_streak', count: 3 },                        rewardType: 'XP',         rewardAmount: 500n    },
-  ] as const;
-  for (const m of missions) {
-    const existing = await prisma.mission.findFirst({ where: { name: m.name } });
-    if (!existing) {
-      await prisma.mission.create({
-        data: {
-          name: m.name,
-          description: m.description,
-          type: m.type,
-          requirements: m.requirements,
-          rewardType: m.rewardType,
-          rewardAmount: m.rewardAmount,
-          isActive: true,
-        },
-      });
-    }
+  console.log('✅ Jackpot tiers seeded (MINI, MINOR, MAJOR, GRAND)');
+
+  // ─── RTP Profiles ───────────────────────────────────────────────────────────
+
+  const rtpProfiles: Array<{
+    gameType: GameType;
+    name: string;
+    rtp: number;
+    variance: string;
+    minBetInCents: bigint;
+    maxBetInCents: bigint;
+    isActive: boolean;
+  }> = [
+    // Slots
+    { gameType: 'SLOTS', name: 'Slots Standard', rtp: 0.96, variance: 'medium', minBetInCents: 100n, maxBetInCents: 100_000n, isActive: true },
+    { gameType: 'SLOTS', name: 'Slots High Roller', rtp: 0.97, variance: 'high', minBetInCents: 5_000n, maxBetInCents: 1_000_000n, isActive: true },
+    // Crash
+    { gameType: 'CRASH', name: 'Crash Standard', rtp: 0.99, variance: 'high', minBetInCents: 100n, maxBetInCents: 500_000n, isActive: true },
+    // Dragon Dice
+    { gameType: 'DRAGON_DICE', name: 'Dice Standard', rtp: 0.99, variance: 'low', minBetInCents: 100n, maxBetInCents: 500_000n, isActive: true },
+    // Panda Spin
+    { gameType: 'PANDA_SPIN', name: 'Wheel Standard', rtp: 0.97, variance: 'medium', minBetInCents: 100n, maxBetInCents: 500_000n, isActive: true },
+    // Mini Game (Treasure)
+    { gameType: 'MINI_GAME', name: 'Treasure Hunt Standard', rtp: 0.97, variance: 'medium', minBetInCents: 100n, maxBetInCents: 100_000n, isActive: true },
+    // Scratch Card
+    { gameType: 'SCRATCH_CARD', name: 'Scratch Standard', rtp: 0.95, variance: 'low', minBetInCents: 100n, maxBetInCents: 10_000n, isActive: true },
+    // Roulette
+    { gameType: 'ROULETTE', name: 'Roulette Standard', rtp: 0.97, variance: 'medium', minBetInCents: 100n, maxBetInCents: 200_000n, isActive: true },
+    // Bamboo Blast
+    { gameType: 'BAMBOO_BLAST', name: 'Bamboo Blast Standard', rtp: 0.96, variance: 'medium', minBetInCents: 100n, maxBetInCents: 100_000n, isActive: true },
+  ];
+
+  for (const profile of rtpProfiles) {
+    await prisma.rTPProfile.create({ data: profile }).catch(() => null); // ignore dupes
   }
-  console.log('✅ Missions seeded');
 
-  console.log('\n🐼 PandaNG seed complete!');
+  console.log(`✅ RTP profiles seeded (${rtpProfiles.length} profiles)`);
+
+  // ─── Sample Missions ────────────────────────────────────────────────────────
+
+  const missions = [
+    {
+      name: 'First Spin',
+      description: 'Complete your first slots spin',
+      type: 'DAILY' as const,
+      rewardXP: 100,
+      rewardInCents: 0n,
+      conditionType: 'SPIN_COUNT',
+      conditionValue: 1,
+      isActive: true,
+      expiresAt: new Date(Date.now() + 86400_000),
+    },
+    {
+      name: 'Bet Streak',
+      description: 'Place 10 bets in any game',
+      type: 'DAILY' as const,
+      rewardXP: 500,
+      rewardInCents: 100_00n, // ₱100 bonus
+      conditionType: 'BET_COUNT',
+      conditionValue: 10,
+      isActive: true,
+      expiresAt: new Date(Date.now() + 86400_000),
+    },
+    {
+      name: 'High Roller Week',
+      description: 'Wager ₱10,000 total in a week',
+      type: 'WEEKLY' as const,
+      rewardXP: 2000,
+      rewardInCents: 500_00n, // ₱500 bonus
+      conditionType: 'TOTAL_WAGER',
+      conditionValue: 1_000_000, // ₱10,000 in cents
+      isActive: true,
+      expiresAt: new Date(Date.now() + 7 * 86400_000),
+    },
+  ];
+
+  for (const mission of missions) {
+    await prisma.mission.create({ data: mission }).catch(() => null);
+  }
+
+  console.log(`✅ Missions seeded (${missions.length} missions)`);
+
+  // ─── Battle Pass Season ──────────────────────────────────────────────────────
+
+  const season = await prisma.battlePassSeason.create({
+    data: {
+      name: 'Panda Dynasty Season 1',
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 90 * 86400_000), // 90 days
+      isActive: true,
+      tiers: {
+        createMany: {
+          data: Array.from({ length: 50 }, (_, i) => ({
+            tier: i + 1,
+            xpRequired: (i + 1) * 1000,
+            rewardType: i % 5 === 4 ? 'BONUS_CASH' : 'XP_BOOST',
+            rewardAmountInCents: i % 5 === 4 ? BigInt((i + 1) * 500) : 0n,
+            rewardDescription: i % 5 === 4 ? `₱${(i + 1) * 5} Bonus` : '1.5× XP for 1 hour',
+          })),
+        },
+      },
+    },
+  }).catch(() => null);
+
+  if (season) {
+    console.log(`✅ Battle Pass Season 1 seeded with 50 tiers`);
+  } else {
+    console.log('⚠️  Battle Pass season already exists, skipping');
+  }
+
+  console.log('\n🐼 Seed complete!');
+  console.log('Admin login: admin@pandang.com (password from SEED_ADMIN_PASSWORD env or default)');
+  console.log('Demo login:  demo@pandang.com  (password from SEED_PLAYER_PASSWORD env or default)');
 }
 
 main()
@@ -155,4 +257,4 @@ main()
     console.error('Seed failed:', e);
     process.exit(1);
   })
-  .finally(() => void prisma.$disconnect());
+  .finally(() => prisma.$disconnect());

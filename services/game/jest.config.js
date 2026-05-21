@@ -4,18 +4,12 @@ module.exports = {
   rootDir: 'src',
   testRegex: '.*\\.spec\\.ts$',
   transform: {
-    '^.+\\.(t|j)s$': ['ts-jest', {
-      tsconfig: {
-        target: 'ES2021',
-        emitDecoratorMetadata: true,
-        experimentalDecorators: true,
-        strictPropertyInitialization: false,
-        exactOptionalPropertyTypes: false,
-        noUncheckedIndexedAccess: false,
-      },
-    }],
+    '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: { strictPropertyInitialization: false } }],
   },
-  collectCoverageFrom: ['**/*.(t|j)s', '!**/*.spec.(t|j)s', '!**/main.ts'],
+  collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
+  moduleNameMapper: {
+    '^@panda-ng/(.*)$': '<rootDir>/../../../packages/$1/src/index.ts',
+  },
 };

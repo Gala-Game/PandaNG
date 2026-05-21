@@ -8,6 +8,14 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+interface ErrorResponse {
+  statusCode: number;
+  message: string | string[];
+  error: string;
+  timestamp: string;
+  path: string;
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -32,7 +40,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = (resp['message'] as string | string[]) ?? exception.message;
         error = (resp['error'] as string) ?? exception.name;
       } else {
-        message = exceptionResponse;
+        message = exceptionResponse as string;
         error = exception.name;
       }
     }
@@ -46,12 +54,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.warn(`${request.method} ${request.url} [${statusCode}]: ${String(message)}`);
     }
 
-    response.status(statusCode).json({
+    const errorResponse: ErrorResponse = {
       statusCode,
       message,
       error,
       timestamp: new Date().toISOString(),
       path: request.url,
-    });
+    };
+
+    response.status(statusCode).json(errorResponse);
   }
 }

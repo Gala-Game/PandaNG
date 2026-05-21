@@ -1,192 +1,231 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CyberButton } from '@/components/ui/CyberButton';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { gameApi } from '@/lib/api';
-import { useWalletStore, formatPHP } from '@/store/wallet.store';
-import { useAuthStore } from '@/store/auth.store';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { BetControls, WinDisplay, formatPHP } from '@/components/game/BetControls';
+import { startGameSession, resolveCrash } from '@/lib/api';
+import { useWalletStore } from '@/store';
 
-const HISTORY_PRESETS = [1.02, 1.45, 3.21, 6.80, 1.01, 15.23, 2.44, 1.02, 88.0, 1.01];
-
-function chipColor(v: number) {
-  if (v < 2) return 'bg-gray-700 text-gray-300';
-  if (v < 5) return 'bg-blue-900/60 text-blue-300';
-  if (v < 10) return 'bg-purple-900/60 text-purple-300';
-  if (v < 50) return 'bg-green-900/60 text-green-300';
-  return 'bg-gold/20 text-gold';
+interface CrashRound {
+  crashPoint: number;
+  cashout: number | null;
+  win: string;
+  timestamp: number;
 }
 
+const TICK_INTERVAL_MS = 100;
+
 export default function CrashPage() {
-  const { isAuthenticated } = useAuthStore();
-  const { balanceInCents, subtractBet, addWin, fetchBalance } = useWalletStore();
-
-  const [betCents, setBetCents] = useState(100);
-  const [phase, setPhase] = useState<'idle' | 'running' | 'crashed'>('idle');
+  const { decrementBalance, incrementBalance } = useWalletStore();
   const [multiplier, setMultiplier] = useState(1.0);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [history, setHistory] = useState(HISTORY_PRESETS);
-  const [result, setResult] = useState<{ cashedOut: boolean; multiplier: number; crashPoint: number; winInCents: string } | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const [phase, setPhase] = useState<'waiting' | 'in-flight' | 'crashed' | 'cashed-out'>('waiting');
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentBet, setCurrentBet] = useState<number>(0);
+  const [history, setHistory] = useState<CrashRound[]>([]);
+  const [result, setResult] = useState<{ winAmountInCents: string; multiplier?: number } | null>(null);
+  const [showWin, setShowWin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const crashPointRef = useRef<number>(0);
+  const multiplierRef = useRef<number>(1.0);
+
+  const stopTicking = useCallback(() => {
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
   }, []);
 
-  // Animate multiplier while running
-  useEffect(() => {
-    if (phase === 'running') {
-      startTimeRef.current = Date.now();
-      timerRef.current = setInterval(() => {
-        const elapsed = (Date.now() - startTimeRef.current) / 1000;
-        // exponential growth: e^(0.00006 * ms)
-        setMultiplier(Math.round(Math.pow(Math.E, 0.06 * elapsed) * 100) / 100);
-      }, 50);
-    } else {
-      stopTimer();
-    }
-    return stopTimer;
-  }, [phase, stopTimer]);
-
-  const placeBet = useCallback(async () => {
-    if (!isAuthenticated || loading) return;
-    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
-    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
-      setError('Bet must be a whole number of cents');
-      return;
-    }
-    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
-    setError('');
-    setLoading(true);
-    setResult(null);
-    setMultiplier(1.0);
-    try {
-      const session = await gameApi.startSession({ gameType: 'CRASH', betAmountInCents: safeBetCents });
-      setSessionId(session.sessionId);
-      subtractBet(BigInt(safeBetCents));
-      setPhase('running');
-    } catch {
-      setError('Failed to start game');
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated, loading, betCents, balanceInCents, subtractBet]);
-
   const cashOut = useCallback(async () => {
-    if (!sessionId || phase !== 'running') return;
-    setPhase('idle');
-    try {
-      const res = await gameApi.resolveSession(sessionId, { cashOutAt: multiplier });
-      const r = res.result as typeof result;
-      setResult(r);
-      setHistory((h) => [multiplier, ...h.slice(0, 9)]);
-      if (r && BigInt(r.winInCents) > 0n) addWin(BigInt(r.winInCents));
-      await fetchBalance();
-    } catch {
-      setError('Failed to cash out');
-    }
-    setSessionId(null);
-  }, [sessionId, phase, multiplier, addWin, fetchBalance]);
+    if (phase !== 'in-flight' || !currentSessionId) return;
+    const cashoutAt = multiplierRef.current;
+    stopTicking();
+    setPhase('cashed-out');
 
-  if (!isAuthenticated) {
-    return (
-      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <GlassCard className="p-8 text-center">
-          <div className="mb-4 text-4xl">🚀</div>
-          <h2 className="font-heading text-2xl font-bold">LOGIN TO PLAY</h2>
-          <Link href="/login" className="mt-4 block"><CyberButton variant="primary">Login / Register</CyberButton></Link>
-        </GlassCard>
-      </main>
-    );
-  }
+    try {
+      const outcome = await resolveCrash(currentSessionId, cashoutAt);
+      const win = BigInt(outcome.winAmountInCents as string);
+      if (win > 0n) incrementBalance(win);
+
+      setHistory((prev) => [
+        {
+          crashPoint: outcome.crashPoint as number,
+          cashout: cashoutAt,
+          win: outcome.winAmountInCents as string,
+          timestamp: Date.now(),
+        },
+        ...prev.slice(0, 19),
+      ]);
+
+      setResult({ winAmountInCents: outcome.winAmountInCents as string, multiplier: cashoutAt });
+      setShowWin(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Cashout failed';
+      setError(message);
+    }
+    setPhase('waiting');
+  }, [phase, currentSessionId, stopTicking, incrementBalance]);
+
+  const startRound = useCallback(async (betAmountInCents: number) => {
+    if (phase !== 'waiting') return;
+    setError(null);
+    setCurrentBet(betAmountInCents);
+    setPhase('in-flight');
+    multiplierRef.current = 1.0;
+    setMultiplier(1.0);
+
+    try {
+      decrementBalance(BigInt(betAmountInCents));
+      const session = await startGameSession('CRASH', betAmountInCents);
+      setCurrentSessionId(session.sessionId);
+
+      // Tick the multiplier upward
+      tickRef.current = setInterval(() => {
+        multiplierRef.current = parseFloat((multiplierRef.current + 0.01).toFixed(2));
+        setMultiplier(multiplierRef.current);
+
+        // Auto-resolve if client reached absurd multiplier (server will have crashed earlier)
+        if (multiplierRef.current >= 100) {
+          stopTicking();
+          void cashOut();
+        }
+      }, TICK_INTERVAL_MS);
+    } catch (err) {
+      stopTicking();
+      setPhase('waiting');
+      const message = err instanceof Error ? err.message : 'Failed to start round';
+      setError(message);
+      incrementBalance(BigInt(betAmountInCents));
+    }
+  }, [phase, decrementBalance, incrementBalance, stopTicking, cashOut]);
+
+  useEffect(() => {
+    return () => stopTicking();
+  }, [stopTicking]);
+
+  const multiplierColor =
+    multiplier < 2 ? 'text-neon-cyan' :
+    multiplier < 5 ? 'text-gold' :
+    'text-neon-pink';
 
   return (
-    <main className="min-h-screen bg-deep-black px-4 py-8">
-      <div className="mx-auto max-w-xl">
-        <div className="mb-4 text-center">
-          <h1 className="font-heading text-4xl font-black text-neon-pink">🚀 PANDA CRASH</h1>
+    <main className="min-h-screen bg-deep-black bg-cyber-grid bg-[size:40px_40px] px-4 py-8">
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Link href="/games" className="text-neon-cyan/60 hover:text-neon-cyan font-heading text-sm">
+            ← Games
+          </Link>
+          <h1 className="font-heading text-2xl font-bold neon-text-cyan">🚀 PANDA CRASH</h1>
+          <div />
         </div>
 
-        {/* History */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {history.map((v, i) => (
-            <span key={i} className={`rounded-full px-2 py-0.5 text-xs font-bold ${chipColor(v)}`}>
-              {v.toFixed(2)}x
-            </span>
-          ))}
-        </div>
+        {/* Main Display */}
+        <div className="glass-card p-8 text-center border-neon-cyan/20 relative overflow-hidden min-h-[220px]
+                        flex flex-col items-center justify-center">
+          {/* Background grid animation */}
+          <div className="absolute inset-0 opacity-10 bg-cyber-grid bg-[size:20px_20px] animate-pulse" />
 
-        {/* Multiplier display */}
-        <GlassCard glow="pink" className="mb-6 flex items-center justify-center py-16">
-          <motion.div
-            key={phase}
-            className={`font-heading text-7xl font-black ${phase === 'crashed' ? 'text-red-500' : 'text-green-400'}`}
-            animate={phase === 'running' ? { scale: [1, 1.02, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 0.5 }}
-          >
-            {multiplier.toFixed(2)}×
-          </motion.div>
-        </GlassCard>
-
-        {/* Win/loss result */}
-        <AnimatePresence>
-          {result && (
+          {phase === 'crashed' ? (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className={`mb-4 rounded-xl p-4 text-center font-heading ${
-                result.cashedOut ? 'bg-green-900/30 border border-green-500/30' : 'bg-red-900/30 border border-red-500/30'
-              }`}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="space-y-2"
             >
-              {result.cashedOut ? (
-                <><div className="text-2xl font-black text-green-400">✅ CASHED OUT at {result.multiplier}×</div>
-                <div className="text-lg text-gold">Won {formatPHP(BigInt(result.winInCents))}</div></>
-              ) : (
-                <><div className="text-2xl font-black text-red-400">💥 CRASHED at {result.crashPoint}×</div>
-                <div className="text-gray-400">Better luck next time!</div></>
+              <div className="text-5xl">💥</div>
+              <div className="font-heading text-3xl text-neon-pink font-bold">CRASHED!</div>
+              <div className="font-heading text-xl text-panda-white/60">
+                at {crashPointRef.current.toFixed(2)}×
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              animate={phase === 'in-flight' ? { scale: [1, 1.02, 1] } : {}}
+              transition={{ repeat: Infinity, duration: 0.5 }}
+            >
+              <div className={`font-heading text-7xl font-bold ${multiplierColor} tabular-nums`}
+                   style={{ textShadow: `0 0 40px currentColor` }}>
+                {multiplier.toFixed(2)}×
+              </div>
+              {phase === 'waiting' && (
+                <div className="text-panda-white/40 font-heading text-sm mt-2">
+                  Place your bet to start
+                </div>
+              )}
+              {phase === 'in-flight' && (
+                <div className="text-neon-cyan/60 font-heading text-sm mt-2 animate-pulse">
+                  🚀 Flying... Cash out before it crashes!
+                </div>
+              )}
+              {phase === 'cashed-out' && (
+                <div className="text-gold font-heading text-sm mt-2">Cashed out! ✓</div>
               )}
             </motion.div>
           )}
-        </AnimatePresence>
+        </div>
 
-        {/* Balance + bet */}
-        <GlassCard className="mb-4 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm text-gray-400">Balance</span>
-            <span className="font-heading font-bold text-neon-cyan">{formatPHP(balanceInCents)}</span>
+        {/* Cash Out button */}
+        {phase === 'in-flight' && (
+          <motion.button
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={cashOut}
+            className="w-full py-4 rounded-xl bg-gold text-deep-black font-heading font-bold text-xl
+                       shadow-neon-gold hover:scale-105 transition-transform"
+          >
+            💰 CASH OUT — {formatPHP(BigInt(Math.floor(currentBet * multiplier)))}
+          </motion.button>
+        )}
+
+        {error && (
+          <div className="text-neon-pink/80 text-sm text-center font-heading">{error}</div>
+        )}
+
+        {/* History */}
+        <div className="glass-card p-4 border-dark-border">
+          <h3 className="font-heading text-sm text-panda-white/50 mb-3 tracking-wider uppercase">
+            Recent Rounds
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {history.length === 0 ? (
+              <span className="text-panda-white/30 text-xs font-heading">No rounds yet</span>
+            ) : (
+              history.map((round, i) => (
+                <span
+                  key={i}
+                  className={`px-2 py-1 rounded font-heading text-xs font-bold ${
+                    round.crashPoint >= 2
+                      ? round.crashPoint >= 10 ? 'bg-gold/20 text-gold' : 'bg-neon-cyan/10 text-neon-cyan'
+                      : 'bg-neon-pink/10 text-neon-pink'
+                  }`}
+                >
+                  {round.crashPoint.toFixed(2)}×
+                </span>
+              ))
+            )}
           </div>
-          <input
-            type="number"
-            min={10}
-            step={1}
-            value={betCents}
-            onChange={(e) => setBetCents(Number(e.target.value))}
-            disabled={phase === 'running'}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50"
-            placeholder="Bet (cents)"
+        </div>
+
+        {/* Bet Controls */}
+        {phase === 'waiting' && (
+          <BetControls
+            minBet={100}
+            maxBet={500000}
+            onBet={startRound}
+            disabled={phase !== 'waiting'}
           />
-          <div className="mt-2 text-right text-xs text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</div>
-        </GlassCard>
-
-        {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
-
-        {phase === 'idle' ? (
-          <CyberButton variant="danger" size="lg" className="w-full" isLoading={loading} onClick={placeBet}>
-            🚀 PLACE BET
-          </CyberButton>
-        ) : (
-          <CyberButton variant="gold" size="lg" className="w-full text-xl" onClick={cashOut}>
-            💰 CASH OUT {multiplier.toFixed(2)}×
-          </CyberButton>
         )}
       </div>
+
+      {showWin && result && (
+        <WinDisplay
+          winAmountInCents={result.winAmountInCents}
+          multiplier={result.multiplier}
+          onClose={() => setShowWin(false)}
+        />
+      )}
     </main>
   );
 }

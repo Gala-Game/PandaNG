@@ -1,230 +1,208 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CyberButton } from '@/components/ui/CyberButton';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { gameApi } from '@/lib/api';
-import { useWalletStore, formatPHP } from '@/store/wallet.store';
-import { useAuthStore } from '@/store/auth.store';
+import { useState, useCallback, useRef } from 'react';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { BetControls, WinDisplay, formatPHP } from '@/components/game/BetControls';
+import { startGameSession, resolveSlots } from '@/lib/api';
+import { useWalletStore } from '@/store';
 
-const SYMBOLS = ['🐼', '🎋', '💎', '7️⃣', '🌸', '⭐', '🔔', '🍀'];
-const BET_PRESETS = [10, 50, 100, 500, 1000];
+const SYMBOLS = ['🐼', '🎋', '🌕', '💎', '🌸', '🍃', '🔴', '💰'];
+const REEL_COUNT = 5;
+const ROW_COUNT = 3;
 
-function ReelColumn({ symbols }: { symbols: string[] }) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      {symbols.map((sym, i) => (
-        <motion.div
-          key={i}
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: i * 0.05 }}
-          className="flex h-14 w-14 items-center justify-center rounded-lg border border-white/20 bg-black/40 text-2xl md:h-16 md:w-16 md:text-3xl"
-        >
-          {sym}
-        </motion.div>
-      ))}
-    </div>
-  );
+// Generate a random display reel for animation purposes
+function randomReel(): string[] {
+  return Array.from({ length: ROW_COUNT }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]!);
 }
 
+type ReelState = string[][];
+
 export default function SlotsPage() {
-  const { isAuthenticated } = useAuthStore();
-  const { balanceInCents, subtractBet, addWin, fetchBalance } = useWalletStore();
-  const [betCents, setBetCents] = useState(100);
-  const [reels, setReels] = useState<string[][]>(
-    Array.from({ length: 5 }, () => Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)] ?? '🐼'))
+  const { decrementBalance, incrementBalance } = useWalletStore();
+  const [reels, setReels] = useState<ReelState>(
+    Array.from({ length: REEL_COUNT }, randomReel),
   );
   const [spinning, setSpinning] = useState(false);
-  const [spinReels, setSpinReels] = useState(false);
-  const [result, setResult] = useState<{ wins: Array<{ lineId: number; multiplier: number; winInCents: string }>; totalWinInCents: string; isJackpotEligible: boolean } | null>(null);
-  const [sessionInfo, setSessionInfo] = useState<{ serverSeedHash: string; clientSeed: string; nonce: number } | null>(null);
-  const [error, setError] = useState('');
-  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
+  const [result, setResult] = useState<{
+    winAmountInCents: string;
+    winLines: Array<{ paylineIndex: number; symbol: string; count: number; multiplier: number; winInCents: string }>;
+    freeSpinsAwarded: number;
+    isJackpotSpin: boolean;
+  } | null>(null);
+  const [showWin, setShowWin] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const spinIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const spin = useCallback(async () => {
-    if (spinning || !isAuthenticated) return;
-    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
-    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
-      setError('Bet must be a whole number of cents');
-      return;
-    }
-    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
-    setError('');
-    setResult(null);
+  const spin = useCallback(async (betAmountInCents: number) => {
+    if (spinning) return;
     setSpinning(true);
-    setSpinReels(true);
+    setResult(null);
+    setError(null);
 
-    // Show spinning animation
-    const animInterval = setInterval(() => {
-      setReels(Array.from({ length: 5 }, () =>
-        Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)] ?? '🐼')
-      ));
+    // Start spin animation
+    spinIntervalRef.current = setInterval(() => {
+      setReels(Array.from({ length: REEL_COUNT }, randomReel));
     }, 80);
 
     try {
-      // Start session
-      const session = await gameApi.startSession({ gameType: 'SLOTS', betAmountInCents: safeBetCents });
-      setSessionInfo({ serverSeedHash: session.serverSeedHash, clientSeed: session.clientSeed, nonce: session.nonce });
-      subtractBet(BigInt(safeBetCents));
+      decrementBalance(BigInt(betAmountInCents));
 
-      // Wait for animation (1.5s)
-      await new Promise((r) => setTimeout(r, 1500));
-      clearInterval(animInterval);
-      setSpinReels(false);
+      // Start session
+      const session = await startGameSession('SLOTS', betAmountInCents);
+      setSessionId(session.sessionId);
 
       // Resolve
-      const res = await gameApi.resolveSession(session.sessionId, {});
-      const gameResult = res.result as typeof result;
-      setResult(gameResult);
+      const outcome = await resolveSlots(session.sessionId);
 
-      // Update reels to show actual result
-      if (gameResult && Array.isArray(res.result?.reels)) {
-        setReels(res.result.reels as string[][]);
+      // Stop animation and show real reels
+      if (spinIntervalRef.current) clearInterval(spinIntervalRef.current);
+
+      // Animate reel reveal sequentially
+      for (let r = 0; r < REEL_COUNT; r++) {
+        await new Promise((res) => setTimeout(res, 150 * (r + 1)));
+        setReels((prev) => {
+          const next = [...prev];
+          next[r] = outcome.reels[r] as string[];
+          return next;
+        });
       }
 
-      if (gameResult && BigInt(gameResult.totalWinInCents) > 0n) {
-        addWin(BigInt(gameResult.totalWinInCents));
-      }
-      await fetchBalance();
-    } catch {
-      setError('Failed to spin. Please try again.');
+      const winAmount = BigInt(outcome.totalWinInCents as string);
+      if (winAmount > 0n) incrementBalance(winAmount);
+
+      setResult(outcome);
+      setShowWin(true);
+    } catch (err: unknown) {
+      if (spinIntervalRef.current) clearInterval(spinIntervalRef.current);
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      setError(message);
+      // Refund client-side balance on error
+      incrementBalance(BigInt(betAmountInCents));
     } finally {
-      clearInterval(animInterval);
-      setSpinReels(false);
       setSpinning(false);
     }
-  }, [spinning, isAuthenticated, betCents, balanceInCents, subtractBet, addWin, fetchBalance]);
-
-  if (!isAuthenticated) {
-    return (
-      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <GlassCard className="p-8 text-center">
-          <div className="mb-4 text-4xl">🎰</div>
-          <h2 className="font-heading text-2xl font-bold">LOGIN TO PLAY</h2>
-          <p className="mt-2 mb-4 text-gray-400">You need an account to play Panda Fortune Slots</p>
-          <Link href="/login"><CyberButton variant="primary">Login / Register</CyberButton></Link>
-        </GlassCard>
-      </main>
-    );
-  }
-
-  const winAmount = result ? BigInt(result.totalWinInCents) : 0n;
+  }, [spinning, decrementBalance, incrementBalance]);
 
   return (
-    <main className="min-h-screen bg-deep-black px-4 py-8">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-6 text-center">
-          <h1 className="font-heading text-4xl font-black text-gold">🎰 PANDA FORTUNE SLOTS</h1>
-          <p className="mt-1 text-sm text-gray-400">5 reels • 20 paylines • Provably fair</p>
+    <main className="min-h-screen bg-deep-black bg-cyber-grid bg-[size:40px_40px] px-4 py-8">
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Link href="/games" className="text-neon-cyan/60 hover:text-neon-cyan font-heading text-sm">
+            ← Games
+          </Link>
+          <h1 className="font-heading text-2xl font-bold neon-text-cyan">🎰 PANDA FORTUNE SLOTS</h1>
+          {sessionId && (
+            <Link
+              href={`/verify?session=${sessionId}`}
+              className="text-xs text-neon-cyan/40 hover:text-neon-cyan/60 font-heading"
+            >
+              Verify ↗
+            </Link>
+          )}
         </div>
 
-        {/* Balance */}
-        <GlassCard className="mb-4 flex items-center justify-between px-4 py-3">
-          <span className="text-sm text-gray-400">Balance</span>
-          <span className="font-heading text-lg font-bold text-neon-cyan">{formatPHP(balanceInCents)}</span>
-        </GlassCard>
-
-        {/* Reels */}
-        <GlassCard glow="gold" className="mb-6 p-6">
-          <div className="flex justify-center gap-2">
-            {reels.map((col, i) => (
+        {/* Slot Machine */}
+        <div className="glass-card p-6 border-neon-cyan/20">
+          {/* Reels */}
+          <div className="flex gap-2 justify-center mb-6">
+            {reels.map((reel, reelIdx) => (
               <motion.div
-                key={i}
-                animate={spinReels ? { y: [0, -10, 10, 0] } : {}}
-                transition={{ repeat: Infinity, duration: 0.15 }}
+                key={reelIdx}
+                className="flex flex-col gap-1 bg-deep-black/60 rounded-xl p-2 border border-dark-border"
+                animate={spinning ? { y: [0, -5, 5, -3, 3, 0] } : {}}
+                transition={{ duration: 0.2, repeat: spinning ? Infinity : 0 }}
               >
-                <ReelColumn symbols={col} />
+                {reel.map((sym, rowIdx) => (
+                  <motion.div
+                    key={`${reelIdx}-${rowIdx}-${sym}`}
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={`w-14 h-14 flex items-center justify-center text-3xl rounded-lg
+                      ${rowIdx === 1 ? 'bg-neon-cyan/5 border border-neon-cyan/20' : 'bg-dark-card/40'}`}
+                  >
+                    {sym}
+                  </motion.div>
+                ))}
               </motion.div>
             ))}
           </div>
 
-          {/* Win display */}
-          <AnimatePresence>
-            {result && winAmount > 0n && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                className="mt-4 text-center"
-              >
-                <div className="font-heading text-3xl font-black text-gold">
-                  WIN! {formatPHP(winAmount)}
+          {/* Win lines display */}
+          {result && result.winLines.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 space-y-1"
+            >
+              {result.winLines.slice(0, 5).map((line, i) => (
+                <div key={i} className="flex items-center justify-between text-xs font-heading px-2">
+                  <span className="text-neon-cyan/60">Line {line.paylineIndex + 1}: {line.symbol}×{line.count}</span>
+                  <span className="text-gold">{line.multiplier}× — {formatPHP(BigInt(line.winInCents))}</span>
                 </div>
-                {result.isJackpotEligible && (
-                  <div className="mt-1 text-neon-pink font-bold">🏆 JACKPOT ELIGIBLE!</div>
-                )}
-              </motion.div>
-            )}
-            {result && winAmount === 0n && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="mt-4 text-center text-gray-500 font-heading"
-              >
-                No win this time. Keep spinning! 🐼
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </GlassCard>
+              ))}
+              {result.freeSpinsAwarded > 0 && (
+                <div className="text-center text-neon-pink font-heading text-sm">
+                  🎁 {result.freeSpinsAwarded} FREE SPINS!
+                </div>
+              )}
+              {result.isJackpotSpin && (
+                <div className="text-center neon-text-gold font-heading font-bold text-lg animate-neon-pulse">
+                  💰 JACKPOT TRIGGER!
+                </div>
+              )}
+            </motion.div>
+          )}
 
-        {/* Bet controls */}
-        <GlassCard className="mb-4 p-4">
-          <div className="mb-3 flex flex-wrap gap-2">
-            {BET_PRESETS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setBetCents(p * 100)}
-                className={`rounded px-3 py-1 text-xs font-bold transition-colors ${
-                  betCents === p * 100
-                    ? 'bg-gold text-black'
-                    : 'border border-white/20 text-gray-300 hover:border-gold/50'
-                }`}
-              >
-                ₱{p}
-              </button>
+          {error && (
+            <div className="mb-4 text-neon-pink/80 text-sm text-center font-heading">{error}</div>
+          )}
+        </div>
+
+        {/* Paytable */}
+        <details className="glass-card border-dark-border">
+          <summary className="p-4 cursor-pointer font-heading text-panda-white/70 text-sm">
+            📋 Paytable
+          </summary>
+          <div className="px-4 pb-4 grid grid-cols-2 gap-2 text-xs font-heading">
+            {[
+              { sym: '💰', name: 'JACKPOT', x3: 50, x4: 200, x5: 1000 },
+              { sym: '💎', name: 'Diamond',  x3: 20, x4: 80,  x5: 400  },
+              { sym: '🐼', name: 'Panda',    x3: 10, x4: 40,  x5: 200  },
+              { sym: '🌕', name: 'Moon',     x3: 6,  x4: 20,  x5: 80   },
+              { sym: '🌸', name: 'Blossom',  x3: 4,  x4: 12,  x5: 50   },
+              { sym: '🎋', name: 'Bamboo',   x3: 3,  x4: 8,   x5: 30   },
+            ].map(({ sym, name, x3, x4, x5 }) => (
+              <div key={sym} className="flex items-center gap-2 bg-dark-card/40 rounded-lg p-2">
+                <span className="text-2xl">{sym}</span>
+                <div>
+                  <div className="text-panda-white/80">{name}</div>
+                  <div className="text-neon-cyan/50">3:{x3}× | 4:{x4}× | 5:{x5}×</div>
+                </div>
+              </div>
             ))}
           </div>
-          <div className="flex items-center gap-3">
-             <input
-               type="number"
-               min={10}
-               max={10_000_000}
-               step={1}
-               value={betCents}
-               onChange={(e) => setBetCents(Number(e.target.value))}
-               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm focus:border-gold/50 focus:outline-none"
-               placeholder="Bet (cents)"
-             />
-             <span className="text-sm text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</span>
-           </div>
-         </GlassCard>
+        </details>
 
-        {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
-
-        <CyberButton
-          variant="gold"
-          size="lg"
-          className="w-full text-xl tracking-widest"
-          isLoading={spinning}
-          onClick={spin}
-        >
-          {spinning ? 'SPINNING…' : '🎰 SPIN'}
-        </CyberButton>
-
-        {/* Provably fair info */}
-        {sessionInfo && (
-          <GlassCard className="mt-4 p-3 text-xs text-gray-500">
-            <p className="font-bold text-gray-400 mb-1">Provably Fair</p>
-            <p>Server Seed Hash: <span className="text-gray-300 break-all">{sessionInfo.serverSeedHash}</span></p>
-            <p>Client Seed: <span className="text-gray-300">{sessionInfo.clientSeed}</span></p>
-            <p>Nonce: {sessionInfo.nonce}</p>
-          </GlassCard>
-        )}
+        {/* Bet Controls */}
+        <BetControls
+          minBet={100}
+          maxBet={100000}
+          onBet={spin}
+          disabled={spinning}
+          loading={spinning}
+        />
       </div>
+
+      {/* Win Overlay */}
+      {showWin && result && (
+        <WinDisplay
+          winAmountInCents={result.totalWinInCents}
+          onClose={() => setShowWin(false)}
+        />
+      )}
     </main>
   );
 }

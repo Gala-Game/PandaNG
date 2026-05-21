@@ -2,146 +2,147 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CyberButton } from '@/components/ui/CyberButton';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { gameApi } from '@/lib/api';
-import { useWalletStore, formatPHP } from '@/store/wallet.store';
-import { useAuthStore } from '@/store/auth.store';
 import Link from 'next/link';
+import { BetControls, WinDisplay } from '@/components/game/BetControls';
+import { startGameSession, resolveDice } from '@/lib/api';
+import { useWalletStore } from '@/store';
 
-function calcPayout(target: number, isOver: boolean) {
-  const chance = isOver ? 100 - target : target;
-  if (chance <= 0) return 9900;
-  return Math.min(Math.round((98 / chance) * 100) / 100, 9900);
+function getDiceMultiplier(target: number, mode: 'over' | 'under'): number {
+  const winChance = mode === 'over' ? (100 - target) / 100 : (target - 1) / 100;
+  if (winChance <= 0) return 0;
+  return Math.floor(((1 - 0.01) / winChance) * 10000) / 10000;
+}
+
+function getWinChance(target: number, mode: 'over' | 'under'): number {
+  return mode === 'over' ? ((100 - target) / 100) * 100 : ((target - 1) / 100) * 100;
 }
 
 export default function DicePage() {
-  const { isAuthenticated } = useAuthStore();
-  const { balanceInCents, subtractBet, addWin, fetchBalance } = useWalletStore();
-  const [betCents, setBetCents] = useState(100);
+  const { decrementBalance, incrementBalance } = useWalletStore();
   const [target, setTarget] = useState(50);
-  const [isOver, setIsOver] = useState(true);
-  const [spinning, setSpinning] = useState(false);
+  const [mode, setMode] = useState<'over' | 'under'>('over');
+  const [rolling, setRolling] = useState(false);
   const [roll, setRoll] = useState<number | null>(null);
-  const [won, setWon] = useState<boolean | null>(null);
-  const [winAmount, setWinAmount] = useState<bigint>(0n);
-  const [error, setError] = useState('');
-  const normalizedBetCents = Number.isSafeInteger(betCents) ? betCents : 0;
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [result, setResult] = useState<{ winAmountInCents: string } | null>(null);
+  const [showWin, setShowWin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const payout = calcPayout(target, isOver);
-  const chance = isOver ? 100 - target : target;
-
-  const bet = useCallback(async () => {
-    if (spinning || !isAuthenticated) return;
-    const safeBetCents = Number.isSafeInteger(betCents) ? betCents : NaN;
-    if (!Number.isInteger(safeBetCents) || safeBetCents < 10) {
-      setError('Bet must be a whole number of cents');
-      return;
-    }
-    if (BigInt(safeBetCents) > balanceInCents) { setError('Insufficient balance'); return; }
-    setError('');
-    setSpinning(true);
+  const rollDice = useCallback(async (betAmountInCents: number) => {
+    if (rolling) return;
+    setRolling(true);
     setRoll(null);
-    setWon(null);
-
-    // Animate dice
-    const animInterval = setInterval(() => {
-      setRoll(Math.floor(Math.random() * 100));
-    }, 50);
+    setError(null);
 
     try {
-      const session = await gameApi.startSession({ gameType: 'DRAGON_DICE', betAmountInCents: safeBetCents });
-      subtractBet(BigInt(safeBetCents));
-      await new Promise((r) => setTimeout(r, 800));
-      clearInterval(animInterval);
-      const res = await gameApi.resolveSession(session.sessionId, { target, isOver });
-      const r = res.result as { roll: number; won: boolean; winInCents: string };
-      setRoll(r.roll);
-      setWon(r.won);
-      const win = BigInt(r.winInCents);
-      setWinAmount(win);
-      if (win > 0n) addWin(win);
-      await fetchBalance();
-    } catch {
-      clearInterval(animInterval);
-      setError('Failed to roll. Please try again.');
-    } finally {
-      setSpinning(false);
-    }
-  }, [spinning, isAuthenticated, betCents, balanceInCents, target, isOver, subtractBet, addWin, fetchBalance]);
+      decrementBalance(BigInt(betAmountInCents));
+      const session = await startGameSession('DRAGON_DICE', betAmountInCents);
+      setSessionId(session.sessionId);
 
-  if (!isAuthenticated) {
-    return (
-      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <GlassCard className="p-8 text-center">
-          <div className="mb-4 text-4xl">🎲</div>
-          <h2 className="font-heading text-2xl font-bold">LOGIN TO PLAY</h2>
-          <Link href="/login" className="mt-4 block"><CyberButton variant="primary">Login / Register</CyberButton></Link>
-        </GlassCard>
-      </main>
-    );
-  }
+      // Animate counting
+      let ticks = 0;
+      const anim = setInterval(() => {
+        setRoll(Math.floor(Math.random() * 100) + 1);
+        if (++ticks > 15) clearInterval(anim);
+      }, 60);
+
+      const outcome = await resolveDice(session.sessionId, target, mode);
+      clearInterval(anim);
+      setRoll(outcome.roll as number);
+
+      const win = BigInt(outcome.winAmountInCents as string);
+      if (win > 0n) incrementBalance(win);
+
+      setResult({ winAmountInCents: outcome.winAmountInCents as string });
+      setShowWin(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Roll failed';
+      setError(message);
+      incrementBalance(BigInt(betAmountInCents));
+    } finally {
+      setRolling(false);
+    }
+  }, [rolling, target, mode, decrementBalance, incrementBalance]);
+
+  const multiplier = getDiceMultiplier(target, mode);
+  const winChance = getWinChance(target, mode);
+  const isWin = roll !== null && (mode === 'over' ? roll > target : roll < target);
 
   return (
-    <main className="min-h-screen bg-deep-black px-4 py-8">
-      <div className="mx-auto max-w-lg">
-        <div className="mb-6 text-center">
-          <h1 className="font-heading text-4xl font-black text-neon-cyan">🎲 DRAGON DICE</h1>
-          <p className="mt-1 text-sm text-gray-400">Provably fair • Up to 9900×</p>
+    <main className="min-h-screen bg-deep-black bg-cyber-grid bg-[size:40px_40px] px-4 py-8">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Link href="/games" className="text-neon-cyan/60 hover:text-neon-cyan font-heading text-sm">
+            ← Games
+          </Link>
+          <h1 className="font-heading text-2xl font-bold neon-text-cyan">🎲 PANDA DICE</h1>
+          {sessionId && (
+            <Link href={`/verify?session=${sessionId}`} className="text-xs text-neon-cyan/40">Verify ↗</Link>
+          )}
         </div>
 
-        {/* Roll display */}
-        <GlassCard glow="cyan" className="mb-6 flex flex-col items-center justify-center py-12">
-          <motion.div
-            className={`font-heading text-8xl font-black ${won === true ? 'text-green-400' : won === false ? 'text-red-400' : 'text-white'}`}
-            animate={spinning ? { scale: [1, 1.1, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 0.1 }}
-          >
-            {roll !== null ? roll.toFixed(2) : '—'}
-          </motion.div>
-
-          <AnimatePresence>
-            {won !== null && (
+        {/* Dice Display */}
+        <div className="glass-card p-8 text-center border-neon-cyan/20">
+          <AnimatePresence mode="wait">
+            {roll !== null ? (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="mt-3 font-heading text-xl font-bold"
+                key={roll}
+                initial={{ scale: 0.5, rotateY: 90, opacity: 0 }}
+                animate={{ scale: 1, rotateY: 0, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 300 }}
+                className="space-y-2"
               >
-                {won ? (
-                  <span className="text-green-400">WIN! {formatPHP(winAmount)}</span>
-                ) : (
-                  <span className="text-red-400">LOSE</span>
-                )}
+                <div
+                  className={`text-8xl font-heading font-bold tabular-nums mx-auto w-36 h-36
+                              flex items-center justify-center rounded-2xl border-2 shadow-lg
+                              ${isWin
+                                ? 'border-gold neon-text-gold'
+                                : 'border-neon-pink/60 text-neon-pink'}`}
+                >
+                  {roll}
+                </div>
+                <div className={`font-heading font-bold text-lg ${isWin ? 'neon-text-gold' : 'text-neon-pink'}`}>
+                  {isWin ? '✓ WIN!' : '✗ LOSE'}
+                </div>
+                <div className="text-panda-white/40 text-sm font-heading">
+                  Roll: {roll} {mode === 'over' ? '>' : '<'} Target: {target}
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle"
+                className="w-36 h-36 mx-auto border-2 border-dark-border rounded-2xl
+                           flex items-center justify-center"
+              >
+                <span className="text-6xl">🎲</span>
               </motion.div>
             )}
           </AnimatePresence>
-        </GlassCard>
+        </div>
 
-        {/* Controls */}
-        <GlassCard className="mb-4 p-4 space-y-4">
-          {/* Over / Under toggle */}
-          <div className="flex rounded-lg overflow-hidden border border-white/10">
-            <button
-              onClick={() => setIsOver(false)}
-              className={`flex-1 py-2 font-heading text-sm font-bold transition-colors ${!isOver ? 'bg-neon-cyan text-black' : 'text-gray-400 hover:bg-white/5'}`}
-            >
-              UNDER {target}
-            </button>
-            <button
-              onClick={() => setIsOver(true)}
-              className={`flex-1 py-2 font-heading text-sm font-bold transition-colors ${isOver ? 'bg-neon-cyan text-black' : 'text-gray-400 hover:bg-white/5'}`}
-            >
-              OVER {target}
-            </button>
+        {/* Target Control */}
+        <div className="glass-card p-6 space-y-4 border-dark-border">
+          <div className="flex gap-3">
+            {(['over', 'under'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`flex-1 py-2 rounded-xl font-heading font-bold uppercase tracking-wider transition-all ${
+                  mode === m
+                    ? 'bg-neon-cyan text-deep-black shadow-neon-cyan'
+                    : 'bg-dark-card border border-dark-border text-panda-white/60 hover:border-neon-cyan/30'
+                }`}
+              >
+                Roll {m}
+              </button>
+            ))}
           </div>
 
-          {/* Target slider */}
-          <div>
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>Target: {target}</span>
-              <span>Win Chance: {chance.toFixed(0)}%</span>
-              <span>Payout: {payout}×</span>
+          <div className="space-y-2">
+            <div className="flex justify-between font-heading text-sm">
+              <span className="text-panda-white/60">Target</span>
+              <span className="text-neon-cyan font-bold">{target}</span>
             </div>
             <input
               type="range"
@@ -150,30 +151,48 @@ export default function DicePage() {
               value={target}
               onChange={(e) => setTarget(Number(e.target.value))}
               className="w-full accent-neon-cyan"
+              disabled={rolling}
             />
+            <div className="flex justify-between text-xs text-panda-white/40 font-heading">
+              <span>2</span>
+              <span>98</span>
+            </div>
           </div>
 
-          {/* Bet */}
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={10}
-              step={1}
-              value={betCents}
-              onChange={(e) => setBetCents(Number(e.target.value))}
-              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-              placeholder="Bet (cents)"
-            />
-            <span className="text-sm text-gray-400">{formatPHP(BigInt(normalizedBetCents))}</span>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-dark-card/60 rounded-xl p-3">
+              <div className="text-panda-white/40 text-xs font-heading uppercase tracking-wider">Payout</div>
+              <div className="text-gold font-heading font-bold text-lg">{multiplier.toFixed(4)}×</div>
+            </div>
+            <div className="bg-dark-card/60 rounded-xl p-3">
+              <div className="text-panda-white/40 text-xs font-heading uppercase tracking-wider">Win Chance</div>
+              <div className="text-neon-cyan font-heading font-bold text-lg">{winChance.toFixed(1)}%</div>
+            </div>
+            <div className="bg-dark-card/60 rounded-xl p-3">
+              <div className="text-panda-white/40 text-xs font-heading uppercase tracking-wider">House Edge</div>
+              <div className="text-panda-white/60 font-heading text-lg">1%</div>
+            </div>
           </div>
-        </GlassCard>
+        </div>
 
-        {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+        {error && <div className="text-neon-pink/80 text-sm text-center font-heading">{error}</div>}
 
-        <CyberButton variant="primary" size="lg" className="w-full" isLoading={spinning} onClick={bet}>
-          🎲 ROLL DICE
-        </CyberButton>
+        <BetControls
+          minBet={100}
+          maxBet={500000}
+          onBet={rollDice}
+          disabled={rolling}
+          loading={rolling}
+        />
       </div>
+
+      {showWin && result && (
+        <WinDisplay
+          winAmountInCents={result.winAmountInCents}
+          multiplier={multiplier}
+          onClose={() => setShowWin(false)}
+        />
+      )}
     </main>
   );
 }

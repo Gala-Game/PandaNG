@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3010",
     "build": "next build",
-    "start": "next start -p 3010",
+    "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },
@@ -18,9 +18,8 @@
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.0",
     "@tanstack/react-query": "^5.28.0",
-    "recharts": "^2.12.0",
-    "@panda-ng/types": "workspace:*",
-    "zustand": "^4.5.0"
+    "zustand": "^4.5.0",
+    "@panda-ng/types": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

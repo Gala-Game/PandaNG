@@ -23,7 +23,7 @@ export class PaymentService {
     private readonly stripe: StripeAdapter,
     private readonly xendit: XenditAdapter,
   ) {
-    this.adapters = new Map<SupportedProvider, PaymentAdapter>([
+    this.adapters = new Map([
       ['GCASH', payMongo],
       ['MAYA', payMongo],
       ['GRABPAY', payMongo],

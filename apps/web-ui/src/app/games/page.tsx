@@ -1,84 +1,118 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { CyberButton } from '@/components/ui/CyberButton';
-import { jackpotApi } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+
+export const metadata: Metadata = {
+  title: 'Game Lobby',
+  description: 'Choose from 5 cyberpunk panda casino games. Provably fair, instant payouts.',
+};
 
 const GAMES = [
-  { slug: 'slots', name: 'Panda Fortune Slots', emoji: '🎰', desc: '5-reel • 20 paylines • 100× jackpot', badge: 'HOT', glow: 'gold' as const },
-  { slug: 'crash', name: 'Panda Crash', emoji: '🚀', desc: 'Multiplier crash • Cash out any time', badge: 'LIVE', glow: 'pink' as const },
-  { slug: 'dice', name: 'Dragon Dice', emoji: '🎲', desc: 'Over / under • Up to 9900×', badge: null, glow: 'cyan' as const },
-  { slug: 'spin-wheel', name: 'Panda Spin Wheel', emoji: '🎡', desc: '9 segments • Up to 100×', badge: null, glow: 'cyan' as const },
+  {
+    href: '/games/slots',
+    emoji: '🎰',
+    name: 'Panda Fortune Slots',
+    description: '5-reel, 20-payline. Scatter wilds, free spins, jackpot trigger.',
+    color: 'border-neon-cyan/40 hover:border-neon-cyan',
+    badge: 'POPULAR',
+    badgeColor: 'bg-neon-cyan/20 text-neon-cyan',
+    rtp: '96%',
+  },
+  {
+    href: '/games/crash',
+    emoji: '🚀',
+    name: 'Panda Crash',
+    description: 'Real-time multiplier grows until it crashes. Cash out before bust!',
+    color: 'border-neon-pink/40 hover:border-neon-pink',
+    badge: 'HOT',
+    badgeColor: 'bg-neon-pink/20 text-neon-pink',
+    rtp: '99%',
+  },
+  {
+    href: '/games/dice',
+    emoji: '🎲',
+    name: 'Panda Dice',
+    description: 'Roll over or under your target. Adjust win chance & payout freely.',
+    color: 'border-gold/40 hover:border-gold',
+    badge: null,
+    badgeColor: '',
+    rtp: '99%',
+  },
+  {
+    href: '/games/wheel',
+    emoji: '🎡',
+    name: 'Panda Spin Wheel',
+    description: 'Seven segments, up to 20× multiplier. Pure luck, pure style.',
+    color: 'border-neon-green/30 hover:border-neon-green',
+    badge: 'NEW',
+    badgeColor: 'bg-neon-green/20 text-neon-green',
+    rtp: '97%',
+  },
+  {
+    href: '/games/treasure',
+    emoji: '🗺️',
+    name: 'Panda Treasure Hunt',
+    description: '5×4 pick grid — uncover gems, avoid mines, cash out any time.',
+    color: 'border-purple-500/40 hover:border-purple-400',
+    badge: null,
+    badgeColor: '',
+    rtp: '97%',
+  },
 ];
 
-export default function GamesPage() {
-  const { data: jackpots } = useQuery({
-    queryKey: ['jackpots'],
-    queryFn: jackpotApi.getAll,
-    refetchInterval: 10_000,
-  });
-
+export default function GamesLobbyPage() {
   return (
-    <main className="min-h-screen bg-cyber-grid bg-[size:40px_40px] bg-deep-black px-4 py-8">
-      <div className="mx-auto max-w-7xl">
-        {/* Jackpot ticker */}
-        {jackpots && jackpots.length > 0 && (
-          <div className="mb-6 flex items-center gap-4 overflow-hidden rounded-xl border border-gold/30 bg-black/60 px-4 py-2">
-            <span className="shrink-0 font-heading text-xs font-bold text-gold">JACKPOTS</span>
-            <div className="flex gap-6 overflow-x-auto font-heading text-sm">
-              {jackpots.map((j: { tier: string; name: string; currentAmountInCents: string }) => (
-                <span key={j.tier} className="shrink-0">
-                  <span className="text-gray-400">{j.name}: </span>
-                  <span className="font-bold text-gold">
-                    ₱{(BigInt(j.currentAmountInCents) / 100n).toLocaleString()}
-                  </span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
+    <main className="min-h-screen bg-deep-black bg-cyber-grid bg-[size:40px_40px] px-4 py-12">
+      <div className="max-w-4xl mx-auto space-y-10">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="font-heading text-4xl font-black text-white md:text-5xl">
-            <span className="text-neon-cyan">GAME</span> LOBBY
+        <div className="text-center space-y-3">
+          <h1 className="font-heading text-4xl font-bold neon-text-cyan">
+            🐼 PANDA GAME LOBBY
           </h1>
-          <p className="mt-2 text-gray-400">Choose your game and start winning</p>
+          <p className="text-panda-white/50 font-body text-lg">
+            All games are provably fair. Every outcome is verifiable on-chain.
+          </p>
         </div>
 
-        {/* Game grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {GAMES.map((game, i) => (
-            <motion.div
-              key={game.slug}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07 }}
-            >
-              <GlassCard glow={game.glow} className="relative overflow-hidden p-6 hover:scale-[1.02] transition-transform">
-                {game.badge && (
-                  <span className={`absolute right-4 top-4 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    game.badge === 'HOT' ? 'bg-orange-500/20 text-orange-400' :
-                    game.badge === 'LIVE' ? 'bg-green-500/20 text-green-400' :
-                    'bg-neon-cyan/20 text-neon-cyan'
-                  }`}>
-                    {game.badge}
-                  </span>
-                )}
-                <div className="mb-3 text-4xl">{game.emoji}</div>
-                <h3 className="font-heading text-xl font-bold text-white">{game.name}</h3>
-                <p className="mt-1 mb-4 text-sm text-gray-400">{game.desc}</p>
-                <Link href={`/games/${game.slug}`}>
-                  <CyberButton variant={game.glow === 'gold' ? 'gold' : game.glow === 'pink' ? 'danger' : 'primary'} className="w-full">
-                    PLAY NOW
-                  </CyberButton>
-                </Link>
-              </GlassCard>
-            </motion.div>
+        {/* Games Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {GAMES.map((game) => (
+            <Link key={game.href} href={game.href} className="group">
+              <div
+                className={`glass-card p-6 border-2 transition-all duration-200 h-full
+                            flex flex-col gap-3 group-hover:-translate-y-1 ${game.color}`}
+              >
+                <div className="flex items-start justify-between">
+                  <span className="text-4xl">{game.emoji}</span>
+                  {game.badge && (
+                    <span className={`px-2 py-0.5 rounded font-heading text-xs font-bold ${game.badgeColor}`}>
+                      {game.badge}
+                    </span>
+                  )}
+                </div>
+                <h2 className="font-heading text-lg font-bold text-panda-white">
+                  {game.name}
+                </h2>
+                <p className="text-panda-white/50 text-sm font-body flex-1">
+                  {game.description}
+                </p>
+                <div className="flex items-center justify-between text-xs font-heading pt-2 border-t border-dark-border">
+                  <span className="text-panda-white/30">RTP</span>
+                  <span className="text-neon-cyan/70">{game.rtp}</span>
+                </div>
+              </div>
+            </Link>
           ))}
+        </div>
+
+        {/* Provably fair notice */}
+        <div className="glass-card p-4 border-neon-cyan/10 text-center">
+          <p className="text-panda-white/40 text-sm font-body">
+            🔒 All games use{' '}
+            <Link href="/verify" className="text-neon-cyan/60 hover:text-neon-cyan underline">
+              provably fair RNG
+            </Link>
+            . Session IDs can be audited after each round.
+          </p>
         </div>
       </div>
     </main>

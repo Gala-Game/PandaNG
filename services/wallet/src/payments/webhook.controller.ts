@@ -75,7 +75,7 @@ export class WebhookController {
     const existing = await this.prisma.payment.findFirst({
       where: {
         providerReference: verification.providerReference,
-        provider,
+        provider: provider as import('@prisma/client').PaymentProvider,
       },
     });
 
@@ -91,7 +91,7 @@ export class WebhookController {
       const payment = await this.prisma.payment.findFirst({
         where: {
           providerReference: verification.providerReference,
-          provider,
+          provider: provider as import('@prisma/client').PaymentProvider,
         },
         orderBy: { createdAt: 'desc' },
       });

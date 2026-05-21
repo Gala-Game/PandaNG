@@ -2,46 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --font-inter: 'Inter', sans-serif;
-    --font-rajdhani: 'Rajdhani', sans-serif;
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-
-  html {
-    scroll-behavior: smooth;
-  }
-
-  body {
-    background-color: #0a0a0f;
-    color: #f8f8f8;
-  }
-
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: #12121a;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #ff6b00;
-    border-radius: 3px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #ff8c33;
-  }
+:root {
+  --neon-cyan: #00ffff;
+  --neon-pink: #ff007f;
+  --neon-green: #39ff14;
+  --gold: #ffd700;
+  --deep-black: #0a0a0f;
 }
 
-@layer utilities {
-  .font-heading {
-    font-family: var(--font-rajdhani);
-  }
-  .font-body {
-    font-family: var(--font-inter);
+@layer base {
+  html { @apply bg-deep-black text-panda-white; }
+  body { @apply font-body antialiased; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-deep-black; }
+  ::-webkit-scrollbar-thumb { @apply bg-neon-cyan/30 rounded-full; }
+}
+
+@layer components {
+  .neon-text-cyan { @apply text-neon-cyan drop-shadow-[0_0_10px_rgba(0,255,255,0.8)]; }
+  .neon-text-gold { @apply text-gold drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]; }
+  .glass-card { @apply bg-dark-card/80 backdrop-blur-md border border-dark-border rounded-2xl; }
+  .admin-btn {
+    @apply px-4 py-2 rounded-lg font-heading font-bold text-sm transition-all active:scale-95;
   }
 }

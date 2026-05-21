@@ -80,7 +80,7 @@ export class StripeAdapter implements PaymentAdapter {
     }
   }
 
-  verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
+  async verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
     // Stripe-Signature header: t=<timestamp>,v1=<hmac>
     const parts = Object.fromEntries(
       signature.split(',').map((part) => {
@@ -109,12 +109,7 @@ export class StripeAdapter implements PaymentAdapter {
 
     if (!isValid) {
       this.logger.warn('Stripe webhook signature mismatch');
-      return Promise.resolve({
-        isValid: false,
-        providerReference: '',
-        amountInCents: 0n,
-        status: 'FAILED',
-      });
+      return { isValid: false, providerReference: '', amountInCents: 0n, status: 'FAILED' };
     }
 
     const event = JSON.parse(payload.toString('utf8')) as {
@@ -133,11 +128,6 @@ export class StripeAdapter implements PaymentAdapter {
     const status: WebhookVerifyResult['status'] =
       obj.payment_status === 'paid' ? 'SUCCESS' : 'FAILED';
 
-    return Promise.resolve({
-      isValid: true,
-      providerReference: obj.id,
-      amountInCents,
-      status,
-    });
+    return { isValid: true, providerReference: obj.id, amountInCents, status };
   }
 }

@@ -63,8 +63,8 @@ export function resolveTreasureHunt(
   const revealedTiles: TreasureTile[] = [];
 
   for (let i = 0; i < pickedIndices.length; i++) {
-    const idx = pickedIndices[i];
-    const tile = grid[idx];
+    const idx = pickedIndices[i]!;
+    const tile = grid[idx]!;
 
     if (tile.type === 'bomb') {
       isBlown = true;
@@ -72,7 +72,7 @@ export function resolveTreasureHunt(
       break;
     }
 
-    const multiplier = PICK_MULTIPLIERS[i] ?? PICK_MULTIPLIERS[PICK_MULTIPLIERS.length - 1];
+    const multiplier = PICK_MULTIPLIERS[i] ?? PICK_MULTIPLIERS[PICK_MULTIPLIERS.length - 1]!;
     const revealed: TreasureTile = { ...tile, multiplier };
     revealedTiles.push(revealed);
     totalMultiplier = multiplier;
