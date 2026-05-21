@@ -56,7 +56,7 @@ export class GameService {
 
     // Find active RTP profile for this game type
     const rtpProfile = await this.prisma.rTPProfile.findFirst({
-      where: { gameType: dto.gameType as GameType, isActive: true },
+      where: { gameType: dto.gameType, isActive: true },
     });
     if (!rtpProfile) throw new NotFoundException('No active RTP profile for this game');
 
@@ -100,7 +100,7 @@ export class GameService {
       session = await this.prisma.gameSession.create({
         data: {
           userId,
-          gameType: dto.gameType as GameType,
+          gameType: dto.gameType,
           betAmountInCents: betInCents,
           winAmountInCents: 0n,
           rtpProfileId: rtpProfile.id,

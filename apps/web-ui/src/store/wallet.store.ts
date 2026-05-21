@@ -31,7 +31,7 @@ export const useWalletStore = create<WalletState>()((set) => ({
         currency: data.currency ?? 'PHP',
         isLoading: false,
       });
-    } catch (err: unknown) {
+    } catch {
       set({ isLoading: false, error: 'Failed to fetch balance' });
     }
   },

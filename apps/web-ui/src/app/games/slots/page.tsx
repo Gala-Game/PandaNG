@@ -89,7 +89,7 @@ export default function SlotsPage() {
         addWin(BigInt(gameResult.totalWinInCents));
       }
       await fetchBalance();
-    } catch (err) {
+    } catch {
       setError('Failed to spin. Please try again.');
     } finally {
       clearInterval(animInterval);
