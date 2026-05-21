@@ -89,7 +89,7 @@ function pickSymbol(float: number): SlotSymbol {
     cursor += weight;
     if (threshold < cursor) return sym as SlotSymbol;
   }
-  return SYMBOLS[SYMBOLS.length - 1]!;
+  return SYMBOLS[SYMBOLS.length - 1];
 }
 
 /**
@@ -109,7 +109,7 @@ export function spinSlots(
   for (let reel = 0; reel < 5; reel++) {
     const col: SlotSymbol[] = [];
     for (let row = 0; row < 3; row++) {
-      col.push(pickSymbol(floats[reel * 3 + row]!));
+      col.push(pickSymbol(floats[reel * 3 + row]));
     }
     reels.push(col);
   }
@@ -127,9 +127,9 @@ export function spinSlots(
 
   // Evaluate each payline
   for (let pi = 0; pi < PAYLINES.length; pi++) {
-    const line = PAYLINES[pi]!;
-    const lineSymbols = line.map((row, reelIdx) => reels[reelIdx]![row]!);
-    const first = lineSymbols[0]!;
+    const line = PAYLINES[pi];
+    const lineSymbols = line.map((row, reelIdx) => reels[reelIdx][row]);
+    const first = lineSymbols[0];
 
     // Count consecutive matching symbols from left
     let count = 1;

@@ -1,0 +1,11 @@
+﻿node_modules
+.pnpm-store
+.git
+.github
+*.log
+.env
+.env.*
+.DS_Store
+dist
+build
+.next

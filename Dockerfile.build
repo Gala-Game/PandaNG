@@ -1,0 +1,33 @@
+﻿FROM node:20-alpine
+
+# Install pnpm globally
+RUN npm install -g pnpm@9.0.0
+
+# Set pnpm config for Docker
+RUN pnpm config set store-dir /pnpm-store
+RUN pnpm config set symlink false
+RUN pnpm config set node-linker isolated
+
+WORKDIR /app
+
+# Copy package files first (better caching)
+COPY package.json pnpm-lock.yaml .npmrc ./
+COPY apps/admin-dashboard/package.json apps/admin-dashboard/
+COPY apps/web-ui/package.json apps/web-ui/
+COPY packages/game-sdk/package.json packages/game-sdk/
+COPY services/game/package.json services/game/
+COPY services/wallet/package.json services/wallet/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Copy source code
+COPY . .
+
+# Build everything
+RUN pnpm run build
+
+# Expose ports
+EXPOSE 3000 3001 3003 3008 3009
+
+CMD ["pnpm", "run", "dev"]

@@ -74,7 +74,7 @@ export class XenditAdapter implements PaymentAdapter {
     }
   }
 
-  async verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
+  verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
     // Xendit uses x-callback-token — constant-time comparison against the static token
     const tokenBuf = Buffer.from(this.callbackToken);
     const sigBuf = Buffer.from(signature);
@@ -88,7 +88,12 @@ export class XenditAdapter implements PaymentAdapter {
 
     if (!isValid) {
       this.logger.warn('Xendit webhook token mismatch');
-      return { isValid: false, providerReference: '', amountInCents: 0n, status: 'FAILED' };
+      return Promise.resolve({
+        isValid: false,
+        providerReference: '',
+        amountInCents: 0n,
+        status: 'FAILED',
+      });
     }
 
     const event = JSON.parse(payload.toString('utf8')) as {
@@ -103,6 +108,11 @@ export class XenditAdapter implements PaymentAdapter {
     const status: WebhookVerifyResult['status'] =
       event.status === 'PAID' || event.status === 'SETTLED' ? 'SUCCESS' : 'FAILED';
 
-    return { isValid: true, providerReference: event.id, amountInCents, status };
+    return Promise.resolve({
+      isValid: true,
+      providerReference: event.id,
+      amountInCents,
+      status,
+    });
   }
 }

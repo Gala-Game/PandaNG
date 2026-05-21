@@ -2,478 +2,345 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { GameType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { StartGameDto } from './dto/start-game.dto';
+import { ResolveGameDto } from './dto/resolve-game.dto';
 import {
   generateServerSeed,
-  generateClientSeed,
   hashServerSeed,
-  spinSlots,
-  computeCrashPoint,
-  calculateCrashWin,
-  resolveDice,
-  spinWheel,
-  resolveTreasureHunt,
-  validateBet,
-  computeJackpotContribution,
+  generateClientSeed,
+  getSlotsResult,
+  getCrashResult,
+  getDiceResult,
+  getWheelResult,
 } from '@panda-ng/game-sdk';
-import { GameTypeDto } from './dto/game.dto';
-import type { GameSession, RTPProfile } from '@prisma/client';
-import { GameGateway } from './game.gateway';
+import { firstValueFrom } from 'rxjs';
 
-const JACKPOT_CONTRIBUTION_BPS = 50; // 0.50% per bet
+// Enum values that mirror prisma/schema.prisma GameSessionStatus
+const SESSION_STATUS = {
+  STARTED: 'STARTED' as const,
+  COMPLETED: 'COMPLETED' as const,
+  ABANDONED: 'ABANDONED' as const,
+};
 
 @Injectable()
 export class GameService {
   private readonly logger = new Logger(GameService.name);
+  private readonly walletUrl: string;
+  private readonly jackpotUrl: string;
+  private readonly internalApiKey: string;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: GameGateway,
-  ) {}
-
-  // ─── RTP Profiles ──────────────────────────────────────────────────────────
-
-  async getRTPProfiles(gameType?: string) {
-    return this.prisma.rTPProfile.findMany({
-      where: {
-        isActive: true,
-        ...(gameType ? { gameType: gameType as never } : {}),
-      },
-      orderBy: [{ gameType: 'asc' }, { name: 'asc' }],
-    });
+    private readonly http: HttpService,
+    private readonly config: ConfigService,
+  ) {
+    this.walletUrl = this.config.get<string>('WALLET_SERVICE_URL') ?? 'http://localhost:3002';
+    this.jackpotUrl = this.config.get<string>('JACKPOT_SERVICE_URL') ?? 'http://localhost:3003';
+    this.internalApiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 
-  // ─── Session Start ──────────────────────────────────────────────────────────
-
-  async startSession(
-    userId: string,
-    gameType: GameTypeDto,
-    betAmountInCents: number,
-    providedClientSeed?: string,
-    rtpProfileId?: string,
-  ) {
-    const betBigInt = BigInt(betAmountInCents);
-
-    // Get RTP profile
-    const rtpProfile = await this.resolveRTPProfile(gameType, rtpProfileId);
-
-    // Get wallet balance
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-      select: { balanceInCents: true, isLocked: true },
+  async startSession(userId: string, dto: StartGameDto) {
+    // Verify user exists
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true },
     });
-    if (!wallet) throw new NotFoundException('Wallet not found');
-    if (wallet.isLocked) throw new ForbiddenException('Wallet is locked');
+    if (!user) throw new NotFoundException('User not found');
+    if (user.status !== 'ACTIVE') throw new BadRequestException('Account is not active');
 
-    // Validate bet
-    const validation = validateBet(betBigInt, {
-      minBetInCents: rtpProfile.minBetInCents,
-      maxBetInCents: rtpProfile.maxBetInCents,
-      rtp: Number(rtpProfile.rtp),
-      variance: rtpProfile.variance as 'low' | 'medium' | 'high',
-    }, wallet.balanceInCents);
+    // Find active RTP profile for this game type
+    const rtpProfile = await this.prisma.rTPProfile.findFirst({
+      where: { gameType: dto.gameType, isActive: true },
+    });
+    if (!rtpProfile) throw new NotFoundException('No active RTP profile for this game');
 
-    if (!validation.ok) {
-      throw new BadRequestException(validation.reason);
+    const betInCents = BigInt(dto.betAmountInCents);
+    if (betInCents < rtpProfile.minBetInCents) {
+      throw new BadRequestException(`Minimum bet is ${rtpProfile.minBetInCents} cents`);
+    }
+    if (betInCents > rtpProfile.maxBetInCents) {
+      throw new BadRequestException(`Maximum bet is ${rtpProfile.maxBetInCents} cents`);
     }
 
+    // Debit wallet (call wallet service)
+    const reference = `GAME-${Date.now()}-${userId.slice(-6)}`;
+    try {
+      await firstValueFrom(
+        this.http.post(
+          `${this.walletUrl}/api/v1/internal/debit`,
+          {
+            userId,
+            amountInCents: dto.betAmountInCents.toString(),
+            type: 'BET',
+            reference,
+            description: `${dto.gameType} bet`,
+          },
+          { headers: { 'X-Internal-Api-Key': this.internalApiKey } },
+        ),
+      );
+    } catch (err) {
+      this.logger.error('Wallet debit failed', err);
+      throw new BadRequestException('Insufficient funds or wallet unavailable');
+    }
+
+    // Generate provably fair seeds
     const serverSeed = generateServerSeed();
-    const clientSeed = providedClientSeed ?? generateClientSeed();
     const serverSeedHash = hashServerSeed(serverSeed);
+    const clientSeed = dto.clientSeed ?? generateClientSeed();
 
-    // Atomic: debit wallet + create session
-    const session = await this.prisma.$transaction(async (tx) => {
-      const w = await tx.wallet.findUnique({
-        where: { userId },
-        select: { id: true, balanceInCents: true },
-      });
-      if (!w) throw new NotFoundException('Wallet not found');
-      if (w.balanceInCents < betBigInt) throw new BadRequestException('Insufficient funds');
-
-      const balanceBefore = w.balanceInCents;
-      const balanceAfter = balanceBefore - betBigInt;
-
-      await tx.wallet.update({
-        where: { userId },
-        data: {
-          balanceInCents: balanceAfter,
-          totalWageredInCents: { increment: betBigInt },
-        },
-      });
-
-      await tx.walletLedgerEntry.create({
-        data: {
-          walletId: w.id,
-          type: 'BET',
-          amountInCents: betBigInt,
-          balanceBeforeInCents: balanceBefore,
-          balanceAfterInCents: balanceAfter,
-          description: `Bet placed — ${gameType}`,
-        },
-      });
-
-      return tx.gameSession.create({
+    // Create game session (serverSeed stored encrypted, only hash exposed)
+    let session;
+    try {
+      session = await this.prisma.gameSession.create({
         data: {
           userId,
-          gameType: gameType as never,
-          betAmountInCents: betBigInt,
+          gameType: dto.gameType,
+          betAmountInCents: betInCents,
+          winAmountInCents: 0n,
           rtpProfileId: rtpProfile.id,
-          seed: clientSeed,
-          serverSeed,
+          seed: reference,
+          serverSeed, // stored but not returned until resolution
           serverSeedHash,
           clientSeed,
           nonce: 0,
-          status: 'STARTED',
+          status: SESSION_STATUS.STARTED,
         },
       });
-    });
+    } catch (err) {
+      this.logger.error('Session creation failed after wallet debit, issuing compensating refund', err);
+      try {
+        await firstValueFrom(
+          this.http.post(
+            `${this.walletUrl}/api/v1/internal/credit`,
+            {
+              userId,
+              amountInCents: dto.betAmountInCents.toString(),
+              type: 'REFUND',
+              reference: `REFUND-${reference}`,
+              description: `${dto.gameType} bet refund`,
+            },
+            { headers: { 'X-Internal-Api-Key': this.internalApiKey } },
+          ),
+        );
+      } catch (refundErr) {
+        this.logger.error('Compensating wallet refund failed', refundErr);
+      }
+      throw err;
+    }
 
-    this.logger.log(
-      `Game session started: ${session.id} | user=${userId} | game=${gameType} | bet=${betAmountInCents}`,
-    );
+    this.logger.log(`Session started: ${session.id} user=${userId} game=${dto.gameType} bet=${betInCents}`);
 
-    // Return server seed HASH only — never the seed itself until session ends
     return {
       sessionId: session.id,
-      gameType,
-      betAmountInCents,
+      gameType: dto.gameType,
+      betAmountInCents: dto.betAmountInCents.toString(),
+      serverSeedHash, // committed hash — client can verify after
       clientSeed,
-      serverSeedHash,
-      rtpProfile: {
-        id: rtpProfile.id,
-        rtp: rtpProfile.rtp.toString(),
-        variance: rtpProfile.variance,
-        minBetInCents: rtpProfile.minBetInCents.toString(),
-        maxBetInCents: rtpProfile.maxBetInCents.toString(),
-      },
+      nonce: 0,
+      rtpProfileId: rtpProfile.id,
     };
   }
 
-  // ─── Session Resolve ────────────────────────────────────────────────────────
-
-  async resolveSlots(userId: string, sessionId: string) {
-    const session = await this.getActiveSession(userId, sessionId);
-    const result = spinSlots(
-      session.serverSeed,
-      session.clientSeed,
-      session.nonce,
-      session.betAmountInCents,
-    );
-
-    const winAmountInCents = result.totalWinInCents;
-    await this.finalizeSession(session, userId, winAmountInCents, {
-      reels: result.reels,
-      winLines: result.winLines,
-      totalMultiplier: result.totalMultiplier,
-      scatterCount: result.scatterCount,
-      freeSpinsAwarded: result.freeSpinsAwarded,
-      isJackpotSpin: result.isJackpotSpin,
-    });
-
-    // Jackpot contribution (fire-and-forget, don't block the response)
-    this.contributeToJackpot(session.betAmountInCents).catch((e) =>
-      this.logger.warn('Jackpot contribution failed', e),
-    );
-
-    return {
-      sessionId,
-      ...result,
-      totalWinInCents: winAmountInCents.toString(),
-      winLines: result.winLines.map((l) => ({ ...l, winInCents: l.winInCents.toString() })),
-      serverSeed: session.serverSeed, // revealed only after session completes
-    };
-  }
-
-  async resolveCrash(userId: string, sessionId: string, cashoutMultiplier: number) {
-    const session = await this.getActiveSession(userId, sessionId);
-    const crashPoint = computeCrashPoint(session.serverSeed, session.nonce);
-    const winAmountInCents = calculateCrashWin(
-      session.betAmountInCents,
-      cashoutMultiplier,
-      crashPoint,
-    );
-
-    await this.finalizeSession(session, userId, winAmountInCents, {
-      crashPoint,
-      cashoutMultiplier,
-    });
-
-    this.contributeToJackpot(session.betAmountInCents).catch((e) =>
-      this.logger.warn('Jackpot contribution failed', e),
-    );
-
-    return {
-      sessionId,
-      crashPoint,
-      cashoutMultiplier,
-      isWin: cashoutMultiplier <= crashPoint,
-      winAmountInCents: winAmountInCents.toString(),
-      serverSeed: session.serverSeed,
-    };
-  }
-
-  async resolveDice(
-    userId: string,
-    sessionId: string,
-    target: number,
-    mode: 'over' | 'under',
-  ) {
-    const session = await this.getActiveSession(userId, sessionId);
-    const result = resolveDice(
-      session.serverSeed,
-      session.clientSeed,
-      session.nonce,
-      session.betAmountInCents,
-      target,
-      mode,
-    );
-
-    await this.finalizeSession(session, userId, result.winAmountInCents, {
-      roll: result.roll,
-      target: result.target,
-      mode: result.mode,
-      multiplier: result.multiplier,
-    });
-
-    this.contributeToJackpot(session.betAmountInCents).catch(() => null);
-
-    return {
-      sessionId,
-      ...result,
-      winAmountInCents: result.winAmountInCents.toString(),
-      serverSeed: session.serverSeed,
-    };
-  }
-
-  async resolveWheel(userId: string, sessionId: string) {
-    const session = await this.getActiveSession(userId, sessionId);
-    const result = spinWheel(
-      session.serverSeed,
-      session.clientSeed,
-      session.nonce,
-      session.betAmountInCents,
-    );
-
-    await this.finalizeSession(session, userId, result.winAmountInCents, {
-      segment: result.segment,
-      segmentIndex: result.segmentIndex,
-    });
-
-    this.contributeToJackpot(session.betAmountInCents).catch(() => null);
-
-    return {
-      sessionId,
-      segmentIndex: result.segmentIndex,
-      segment: result.segment,
-      winAmountInCents: result.winAmountInCents.toString(),
-      serverSeed: session.serverSeed,
-    };
-  }
-
-  async resolveTreasure(userId: string, sessionId: string, pickedIndices: number[]) {
-    const session = await this.getActiveSession(userId, sessionId);
-    const result = resolveTreasureHunt(
-      session.serverSeed,
-      session.clientSeed,
-      session.nonce,
-      session.betAmountInCents,
-      pickedIndices,
-    );
-
-    await this.finalizeSession(session, userId, result.winAmountInCents, {
-      pickedIndices: result.pickedIndices,
-      revealedTiles: result.revealedTiles,
-      isBlown: result.isBlown,
-      totalMultiplier: result.totalMultiplier,
-      fullGrid: result.grid,
-    });
-
-    this.contributeToJackpot(session.betAmountInCents).catch(() => null);
-
-    return {
-      sessionId,
-      revealedTiles: result.revealedTiles,
-      isBlown: result.isBlown,
-      totalMultiplier: result.totalMultiplier,
-      winAmountInCents: result.winAmountInCents.toString(),
-      fullGrid: result.grid, // full grid revealed once session ends
-      serverSeed: session.serverSeed,
-    };
-  }
-
-  // ─── Verify (Provably Fair) ─────────────────────────────────────────────────
-
-  async verifySession(sessionId: string) {
+  async resolveSession(userId: string, sessionId: string, opts: ResolveGameDto) {
     const session = await this.prisma.gameSession.findUnique({
       where: { id: sessionId },
-      select: {
-        id: true,
-        gameType: true,
-        serverSeed: true,
-        serverSeedHash: true,
-        clientSeed: true,
-        nonce: true,
-        betAmountInCents: true,
-        winAmountInCents: true,
-        status: true,
-        metadata: true,
-        startedAt: true,
-        endedAt: true,
-      },
     });
-    if (!session) throw new NotFoundException('Game session not found');
-    if (session.status !== 'COMPLETED') {
-      // Don't reveal server seed until game is over
-      return {
-        sessionId,
-        status: session.status,
-        message: 'Server seed will be revealed when the session is completed',
-        serverSeedHash: session.serverSeedHash,
-        clientSeed: session.clientSeed,
-        nonce: session.nonce,
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.userId !== userId) throw new BadRequestException('Session does not belong to user');
+    if (session.status !== SESSION_STATUS.STARTED) {
+      throw new BadRequestException('Session already resolved');
+    }
+
+    const { serverSeed, clientSeed, nonce } = session;
+    const betInCents = session.betAmountInCents;
+    const gameType = session.gameType as string;
+
+    // Calculate outcome using game-sdk
+    let winInCents = 0n;
+    let result: unknown;
+
+    if (gameType === 'SLOTS' || gameType === 'BAMBOO_BLAST') {
+      const r = getSlotsResult(serverSeed, clientSeed, nonce, betInCents);
+      winInCents = r.totalWinInCents;
+      result = {
+        reels: r.reels,
+        wins: r.wins.map((w) => ({ ...w, winInCents: w.winInCents.toString() })),
+        totalWinInCents: r.totalWinInCents.toString(),
+        multiplier: r.multiplier,
+        isJackpotEligible: r.isJackpotEligible,
       };
+    } else if (gameType === 'CRASH') {
+      const cashOutAt = opts.cashOutAt ?? 0;
+      const r = getCrashResult(serverSeed, clientSeed, nonce, betInCents, cashOutAt);
+      winInCents = r.winInCents;
+      result = {
+        crashPoint: r.crashPoint,
+        cashedOut: r.cashedOut,
+        multiplier: r.multiplier,
+        winInCents: r.winInCents.toString(),
+        netChangeInCents: r.netChangeInCents.toString(),
+      };
+    } else if (gameType === 'DRAGON_DICE') {
+      const target = opts.target ?? 50;
+      const isOver = opts.isOver ?? true;
+      const r = getDiceResult(serverSeed, clientSeed, nonce, betInCents, target, isOver);
+      winInCents = r.winInCents;
+      result = {
+        roll: r.roll,
+        won: r.won,
+        payout: r.payout,
+        winInCents: r.winInCents.toString(),
+        netChangeInCents: r.netChangeInCents.toString(),
+      };
+    } else if (gameType === 'PANDA_SPIN') {
+      const r = getWheelResult(serverSeed, clientSeed, nonce, betInCents);
+      winInCents = r.winInCents;
+      result = {
+        segmentIndex: r.segmentIndex,
+        segment: r.segment,
+        winInCents: r.winInCents.toString(),
+        netChangeInCents: r.netChangeInCents.toString(),
+      };
+    } else {
+      throw new BadRequestException(`Unknown game type: ${gameType}`);
     }
 
-    // Verify hash matches seed
-    const computedHash = hashServerSeed(session.serverSeed);
-    const hashMatches = computedHash === session.serverSeedHash;
+    // Credit wallet if player won
+    let payoutFailed = false;
+    if (winInCents > 0n) {
+      const winReference = `WIN-${sessionId}`;
+      try {
+        await firstValueFrom(
+          this.http.post(
+            `${this.walletUrl}/api/v1/internal/credit`,
+            {
+              userId,
+              amountInCents: winInCents.toString(),
+              type: 'WIN',
+              reference: winReference,
+              description: `${gameType} win`,
+            },
+            { headers: { 'X-Internal-Api-Key': this.internalApiKey } },
+          ),
+        );
+      } catch (err) {
+        this.logger.error(`CRITICAL: Failed to credit win for session ${sessionId}`, err);
+        payoutFailed = true;
+      }
+    }
+
+    // Fire-and-forget jackpot contribution
+    this.contributeToJackpot(betInCents).catch(() => void 0);
+
+    // Update session — use ABANDONED + payoutError flag if credit failed
+    const updatedSession = await this.prisma.gameSession.update({
+      where: { id: sessionId },
+      data: {
+        status: payoutFailed ? SESSION_STATUS.ABANDONED : SESSION_STATUS.COMPLETED,
+        winAmountInCents: winInCents,
+        endedAt: new Date(),
+        metadata: payoutFailed
+          ? { ...(result as object), payoutError: true }
+          : (result as object),
+      },
+    });
+
+    this.logger.log(`Session resolved: ${sessionId} win=${winInCents}`);
 
     return {
       sessionId,
-      gameType: session.gameType,
-      serverSeed: session.serverSeed,
+      gameType,
+      betAmountInCents: betInCents.toString(),
+      winAmountInCents: winInCents.toString(),
+      netChangeInCents: (winInCents - betInCents).toString(),
+      serverSeed, // revealed now — client can verify
       serverSeedHash: session.serverSeedHash,
-      computedHash,
-      hashMatches,
-      clientSeed: session.clientSeed,
-      nonce: session.nonce,
-      betAmountInCents: session.betAmountInCents.toString(),
-      winAmountInCents: session.winAmountInCents.toString(),
-      metadata: session.metadata,
-      startedAt: session.startedAt,
-      endedAt: session.endedAt,
+      clientSeed,
+      nonce,
+      result,
+      completedAt: updatedSession.endedAt,
     };
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
-
-  private async resolveRTPProfile(
-    gameType: GameTypeDto,
-    rtpProfileId?: string,
-  ): Promise<RTPProfile> {
-    if (rtpProfileId) {
-      const profile = await this.prisma.rTPProfile.findUnique({ where: { id: rtpProfileId } });
-      if (!profile || !profile.isActive) {
-        throw new NotFoundException('RTP profile not found or inactive');
-      }
-      return profile;
-    }
-
-    // Default: first active profile for this game type
-    const profile = await this.prisma.rTPProfile.findFirst({
-      where: { gameType: gameType as never, isActive: true },
-    });
-    if (!profile) throw new NotFoundException(`No active RTP profile found for ${gameType}`);
-    return profile;
-  }
-
-  private async getActiveSession(userId: string, sessionId: string): Promise<GameSession> {
+  async getSession(userId: string, sessionId: string) {
     const session = await this.prisma.gameSession.findUnique({
       where: { id: sessionId },
     });
-    if (!session) throw new NotFoundException('Game session not found');
-    if (session.userId !== userId) throw new ForbiddenException('Not your session');
-    if (session.status !== 'STARTED') {
-      throw new BadRequestException(`Session is already ${session.status}`);
-    }
-    return session;
+    if (!session || session.userId !== userId) throw new NotFoundException('Session not found');
+    return this.serializeSession(session);
   }
 
-  private async finalizeSession(
-    session: GameSession,
-    userId: string,
-    winAmountInCents: bigint,
-    metadata: Record<string, unknown>,
-  ) {
-    await this.prisma.$transaction(async (tx) => {
-      // Credit winnings if any
-      if (winAmountInCents > 0n) {
-        const wallet = await tx.wallet.findUnique({
-          where: { userId },
-          select: { id: true, balanceInCents: true },
-        });
-        if (!wallet) throw new NotFoundException('Wallet not found');
+  async getUserSessions(userId: string, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [sessions, total] = await Promise.all([
+      this.prisma.gameSession.findMany({
+        where: { userId },
+        orderBy: { startedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.gameSession.count({ where: { userId } }),
+    ]);
+    return {
+      data: sessions.map((s: Record<string, unknown>) => this.serializeSession(s)),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 
-        const balanceBefore = wallet.balanceInCents;
-        const balanceAfter = balanceBefore + winAmountInCents;
+  async getRTPProfiles(gameType?: string) {
+    const gameTypeFilter = gameType ? (gameType as GameType) : undefined;
+    const profiles = await this.prisma.rTPProfile.findMany({
+      where: {
+        isActive: true,
+        ...(gameTypeFilter ? { gameType: gameTypeFilter } : {}),
+      },
+      orderBy: { gameType: 'asc' },
+    });
+    return profiles.map((p) => ({
+      ...p,
+      minBetInCents: p.minBetInCents.toString(),
+      maxBetInCents: p.maxBetInCents.toString(),
+      rtp: Number(p.rtp),
+    }));
+  }
 
-        await tx.wallet.update({
-          where: { userId },
-          data: {
-            balanceInCents: balanceAfter,
-            totalWonInCents: { increment: winAmountInCents },
-          },
-        });
+  private serializeSession(s: Record<string, unknown>) {
+    return {
+      ...s,
+      betAmountInCents: String(s['betAmountInCents']),
+      winAmountInCents: String(s['winAmountInCents']),
+      // Hide serverSeed until session is completed
+      serverSeed: s['status'] === 'COMPLETED' ? s['serverSeed'] : undefined,
+    };
+  }
 
-        await tx.walletLedgerEntry.create({
-          data: {
-            walletId: wallet.id,
-            type: 'WIN',
-            amountInCents: winAmountInCents,
-            balanceBeforeInCents: balanceBefore,
-            balanceAfterInCents: balanceAfter,
-            gameSessionId: session.id,
-            description: `Win — ${session.gameType}`,
-          },
-        });
+  private async contributeToJackpot(betInCents: bigint): Promise<void> {
+    try {
+      // GET /api/v1/jackpots returns a plain array of jackpot objects
+      const response = await firstValueFrom(
+        this.http.get<Array<{ id: string; tier: string }>>(`${this.jackpotUrl}/api/v1/jackpots`),
+      );
+      const jackpots = Array.isArray(response.data) ? response.data : [];
+      // Contribute to GRAND jackpot — 0.5% of bet
+      const grand = jackpots.find((j) => j.tier === 'GRAND');
+      if (grand) {
+        await firstValueFrom(
+          this.http.post(`${this.jackpotUrl}/api/v1/jackpots/${grand.id}/contribute`, {
+            betAmountInCents: betInCents.toString(),
+          }),
+        );
       }
-
-      // Close session (marks as COMPLETED and reveals server seed in metadata)
-      await tx.gameSession.update({
-        where: { id: session.id },
-        data: {
-          status: 'COMPLETED',
-          winAmountInCents,
-          endedAt: new Date(),
-          metadata: metadata as never,
-        },
-      });
-    });
-
-    this.logger.log(
-      `Session resolved: ${session.id} | win=${winAmountInCents} | user=${userId}`,
-    );
-
-    // Broadcast outcome to the user's WebSocket room
-    this.gateway.emitGameResult(userId, {
-      sessionId: session.id,
-      gameType: session.gameType,
-      betAmountInCents: session.betAmountInCents.toString(),
-      winAmountInCents: winAmountInCents.toString(),
-      ...metadata,
-    });
-  }
-
-  private async contributeToJackpot(betAmountInCents: bigint) {
-    const contribution = computeJackpotContribution(betAmountInCents, JACKPOT_CONTRIBUTION_BPS);
-    if (contribution <= 0n) return;
-
-    // Contribute to all active jackpots (lowest tier primarily)
-    const jackpots = await this.prisma.jackpot.findMany({
-      where: { isActive: true },
-      orderBy: { tier: 'asc' },
-      take: 1,
-    });
-
-    const jackpot = jackpots[0];
-    if (!jackpot) return;
-
-    await this.prisma.jackpot.update({
-      where: { id: jackpot.id },
-      data: { currentAmountInCents: { increment: contribution } },
-    });
+    } catch {
+      // Silent failure — jackpot contribution is best-effort
+    }
   }
 }

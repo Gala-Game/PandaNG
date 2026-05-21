@@ -107,7 +107,7 @@ export class PayMongoAdapter implements PaymentAdapter {
     }
   }
 
-  async verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
+  verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
     // PayMongo sends: paymongo-signature: t=<timestamp>,li=<hmac>,te=<hmac>
     const parts = Object.fromEntries(
       signature.split(',').map((part) => {
@@ -126,7 +126,12 @@ export class PayMongoAdapter implements PaymentAdapter {
 
     if (!isValid) {
       this.logger.warn('PayMongo webhook signature mismatch');
-      return { isValid: false, providerReference: '', amountInCents: 0n, status: 'FAILED' };
+      return Promise.resolve({
+        isValid: false,
+        providerReference: '',
+        amountInCents: 0n,
+        status: 'FAILED',
+      });
     }
 
     const event = JSON.parse(payload.toString('utf8')) as {
@@ -151,11 +156,11 @@ export class PayMongoAdapter implements PaymentAdapter {
     const status: WebhookVerifyResult['status'] =
       paymongoStatus === 'chargeable' || paymongoStatus === 'paid' ? 'SUCCESS' : 'FAILED';
 
-    return {
+    return Promise.resolve({
       isValid: true,
       providerReference: source.id,
       amountInCents,
       status,
-    };
+    });
   }
 }

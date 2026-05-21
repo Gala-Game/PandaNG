@@ -1,54 +1,95 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_GAME_SERVICE_URL ?? 'http://localhost:3009/api/v1';
-const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL ?? 'http://localhost:3001/api/v1';
-const WALLET_URL = process.env.NEXT_PUBLIC_WALLET_SERVICE_URL ?? 'http://localhost:3002/api/v1';
+const AUTH_BASE = process.env['NEXT_PUBLIC_AUTH_URL'] ?? 'http://localhost:3001/api/v1';
+const WALLET_BASE = process.env['NEXT_PUBLIC_WALLET_URL'] ?? 'http://localhost:3002/api/v1';
+const GAME_BASE = process.env['NEXT_PUBLIC_GAME_URL'] ?? 'http://localhost:3009/api/v1';
+const JACKPOT_BASE = process.env['NEXT_PUBLIC_JACKPOT_URL'] ?? 'http://localhost:3003/api/v1';
+
+const getToken = () =>
+  typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
 
 function createClient(baseURL: string) {
-  const client = axios.create({ baseURL, withCredentials: false });
-
+  const client = axios.create({ baseURL });
   client.interceptors.request.use((config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
+    const token = getToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   });
-
   client.interceptors.response.use(
-    (response) => response,
+    (r) => r,
     async (error) => {
       if (error.response?.status === 401 && typeof window !== 'undefined') {
-        // Attempt token refresh
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
+        const refresh = localStorage.getItem('refreshToken');
+        if (refresh) {
           try {
-            const { data } = await axios.post(`${AUTH_URL}/auth/refresh`, { refreshToken });
-            localStorage.setItem('access_token', data.data.accessToken);
-            localStorage.setItem('refresh_token', data.data.refreshToken);
-            error.config.headers.Authorization = `Bearer ${data.data.accessToken}`;
+            const res = await axios.post(`${AUTH_BASE}/auth/refresh`, { refreshToken: refresh });
+            const { accessToken, refreshToken: newRefresh } = res.data.data;
+            localStorage.setItem('accessToken', accessToken);
+            localStorage.setItem('refreshToken', newRefresh);
+            if (!error.config.headers) {
+              error.config.headers = {};
+            }
+            error.config.headers.Authorization = `Bearer ${accessToken}`;
             return client.request(error.config);
           } catch {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            window.location.href = '/login';
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
           }
         }
       }
-      return Promise.reject(error);
+      if (error instanceof Error) {
+        return Promise.reject(error);
+      }
+      const wrappedError = new Error(String(error));
+      (wrappedError as Error & { cause?: unknown }).cause = error;
+      return Promise.reject(wrappedError);
     },
   );
-
   return client;
 }
 
-export const gameApi = createClient(BASE_URL);
-export const authApi = createClient(AUTH_URL);
-export const walletApi = createClient(WALLET_URL);
+const authClient = createClient(AUTH_BASE);
+const walletClient = createClient(WALLET_BASE);
+const gameClient = createClient(GAME_BASE);
+const jackpotClient = createClient(JACKPOT_BASE);
 
-// ─── Game API helpers ─────────────────────────────────────────────────────────
+export const authApi = {
+  register: (data: { email: string; username: string; password: string; referralCode?: string }) =>
+    authClient.post('/auth/register', data).then((r) => r.data.data),
+  login: (data: { email: string; password: string }) =>
+    authClient.post('/auth/login', data).then((r) => r.data.data),
+  refresh: (refreshToken: string) =>
+    authClient.post('/auth/refresh', { refreshToken }).then((r) => r.data.data),
+  me: () => authClient.get('/auth/me').then((r) => r.data.data),
+};
+
+export const walletApi = {
+  getBalance: () => walletClient.get('/wallet/balance').then((r) => r.data.data),
+  getWallet: () => walletClient.get('/wallet').then((r) => r.data.data),
+  getTransactions: (page = 1, limit = 20) =>
+    walletClient.get(`/wallet/transactions?page=${page}&limit=${limit}`).then((r) => r.data.data),
+};
+
+export const gameApi = {
+  startSession: (data: { gameType: string; betAmountInCents: number; clientSeed?: string }) =>
+    gameClient.post('/games/start', data).then((r) => r.data.data),
+  resolveSession: (
+    sessionId: string,
+    options: { cashOutAt?: number; target?: number; isOver?: boolean },
+  ) => gameClient.post(`/games/${sessionId}/resolve`, options).then((r) => r.data.data),
+  getSession: (sessionId: string) =>
+    gameClient.get(`/games/${sessionId}`).then((r) => r.data.data),
+  getHistory: (page = 1, limit = 20) =>
+    gameClient.get(`/games?page=${page}&limit=${limit}`).then((r) => r.data.data),
+  getRTPProfiles: (gameType?: string) =>
+    gameClient
+      .get(`/games/rtp-profiles${gameType ? `?gameType=${gameType}` : ''}`)
+      .then((r) => r.data.data),
+};
+
+export const jackpotApi = {
+  getAll: () => jackpotClient.get('/jackpots').then((r) => r.data.data),
+};
 
 export type GameType = 'SLOTS' | 'CRASH' | 'DRAGON_DICE' | 'PANDA_SPIN' | 'MINI_GAME';
 
@@ -72,7 +113,7 @@ export async function startGameSession(
   betAmountInCents: number,
   clientSeed?: string,
 ): Promise<StartSessionResponse> {
-  const { data } = await gameApi.post<{ data: StartSessionResponse }>('/games/session/start', {
+  const { data } = await gameClient.post<{ data: StartSessionResponse }>('/games/session/start', {
     gameType,
     betAmountInCents,
     clientSeed,
@@ -80,39 +121,13 @@ export async function startGameSession(
   return data.data;
 }
 
-export async function resolveSlots(sessionId: string) {
-  const { data } = await gameApi.post('/games/session/resolve/slots', { sessionId });
-  return data.data;
-}
-
-export async function resolveCrash(sessionId: string, cashoutMultiplier: number) {
-  const { data } = await gameApi.post('/games/session/resolve/crash', {
-    sessionId,
-    cashoutMultiplier,
-  });
-  return data.data;
-}
-
-export async function resolveDice(
-  sessionId: string,
-  target: number,
-  mode: 'over' | 'under',
-) {
-  const { data } = await gameApi.post('/games/session/resolve/dice', {
-    sessionId,
-    target,
-    mode,
-  });
-  return data.data;
-}
-
 export async function resolveWheel(sessionId: string) {
-  const { data } = await gameApi.post('/games/session/resolve/wheel', { sessionId });
+  const { data } = await gameClient.post('/games/session/resolve/wheel', { sessionId });
   return data.data;
 }
 
 export async function resolveTreasure(sessionId: string, pickedIndices: number[]) {
-  const { data } = await gameApi.post('/games/session/resolve/treasure', {
+  const { data } = await gameClient.post('/games/session/resolve/treasure', {
     sessionId,
     pickedIndices,
   });
@@ -120,11 +135,15 @@ export async function resolveTreasure(sessionId: string, pickedIndices: number[]
 }
 
 export async function verifySession(sessionId: string) {
-  const { data } = await gameApi.get(`/games/session/${sessionId}/verify`);
+  const { data } = await gameClient.get(`/games/session/${sessionId}/verify`);
   return data.data;
 }
 
-export async function getBalance() {
-  const { data } = await walletApi.get('/wallet/balance');
-  return data.data as { balanceInCents: string; bonusBalanceInCents: string; currency: string };
+export async function getBalance(): Promise<{
+  balanceInCents: string;
+  bonusBalanceInCents: string;
+  currency: string;
+}> {
+  const { data } = await walletClient.get('/wallet/balance');
+  return data.data;
 }

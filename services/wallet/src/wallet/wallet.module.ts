@@ -5,16 +5,9 @@ import { WalletController } from './wallet.controller';
 import { InternalWalletController } from './wallet.internal.controller';
 import { WalletService } from './wallet.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { PaymentService } from '../payments/payment.service';
-import { PayMongoAdapter } from '../payments/paymongo.adapter';
-import { StripeAdapter } from '../payments/stripe.adapter';
-import { XenditAdapter } from '../payments/xendit.adapter';
-import { WebhookController } from '../payments/webhook.controller';
-import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
-    PrismaModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (cs: ConfigService) => ({
@@ -27,8 +20,8 @@ import { PrismaModule } from '../prisma/prisma.module';
       inject: [ConfigService],
     }),
   ],
-  controllers: [WalletController, WebhookController],
-  providers: [WalletService, LedgerService, PaymentService, PayMongoAdapter, StripeAdapter, XenditAdapter],
+  controllers: [WalletController, InternalWalletController],
+  providers: [WalletService, LedgerService],
   exports: [WalletService],
 })
 export class WalletModule {}
