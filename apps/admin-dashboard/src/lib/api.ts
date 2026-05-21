@@ -166,3 +166,9 @@ export async function fetchDashboardStats() {
   const { data } = await adminApiClient.get('/dashboard/stats');
   return data;
 }
+
+/** TODO: wire up to admin-api GET /liveops/configs */
+export async function fetchLiveOpsConfigs(environment = 'production') {
+  const { data } = await adminApiClient.get('/liveops/configs', { params: { environment } });
+  return data;
+}

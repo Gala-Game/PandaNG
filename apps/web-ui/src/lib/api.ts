@@ -90,3 +90,60 @@ export const gameApi = {
 export const jackpotApi = {
   getAll: () => jackpotClient.get('/jackpots').then((r) => r.data.data),
 };
+
+export type GameType = 'SLOTS' | 'CRASH' | 'DRAGON_DICE' | 'PANDA_SPIN' | 'MINI_GAME';
+
+export interface StartSessionResponse {
+  sessionId: string;
+  gameType: GameType;
+  betAmountInCents: number;
+  clientSeed: string;
+  serverSeedHash: string;
+  rtpProfile: {
+    id: string;
+    rtp: string;
+    variance: string;
+    minBetInCents: string;
+    maxBetInCents: string;
+  };
+}
+
+export async function startGameSession(
+  gameType: GameType,
+  betAmountInCents: number,
+  clientSeed?: string,
+): Promise<StartSessionResponse> {
+  const { data } = await gameClient.post<{ data: StartSessionResponse }>('/games/session/start', {
+    gameType,
+    betAmountInCents,
+    clientSeed,
+  });
+  return data.data;
+}
+
+export async function resolveWheel(sessionId: string) {
+  const { data } = await gameClient.post('/games/session/resolve/wheel', { sessionId });
+  return data.data;
+}
+
+export async function resolveTreasure(sessionId: string, pickedIndices: number[]) {
+  const { data } = await gameClient.post('/games/session/resolve/treasure', {
+    sessionId,
+    pickedIndices,
+  });
+  return data.data;
+}
+
+export async function verifySession(sessionId: string) {
+  const { data } = await gameClient.get(`/games/session/${sessionId}/verify`);
+  return data.data;
+}
+
+export async function getBalance(): Promise<{
+  balanceInCents: string;
+  bonusBalanceInCents: string;
+  currency: string;
+}> {
+  const { data } = await walletClient.get('/wallet/balance');
+  return data.data;
+}
