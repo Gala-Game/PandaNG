@@ -6,7 +6,7 @@
  * the gateway returns mock URLs. Signature uses HMAC-SHA256.
  */
 
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
@@ -41,10 +41,14 @@ export class PayMongoAdapter implements PaymentAdapter {
   private readonly baseUrl = 'https://api.paymongo.com/v1';
   private readonly secretKey: string;
   private readonly webhookSecret: string;
+  private readonly mockEnabled: boolean;
 
   constructor(private readonly config: ConfigService) {
     this.secretKey = config.getOrThrow<string>('PAYMONGO_SECRET_KEY');
     this.webhookSecret = config.getOrThrow<string>('PAYMONGO_WEBHOOK_SECRET');
+    const mockFlag = config.get<string>('PAYMENTS_MOCK');
+    const nodeEnv = config.get<string>('NODE_ENV');
+    this.mockEnabled = mockFlag === 'true' || nodeEnv !== 'production';
   }
 
   async initiatePayment(params: PaymentInitiateParams): Promise<PaymentInitiateResult> {
@@ -99,7 +103,9 @@ export class PayMongoAdapter implements PaymentAdapter {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       this.logger.error('PayMongo request failed', error);
-      // In sandbox/dev mode, return a mock URL so the rest of the flow can be tested
+      if (!this.mockEnabled) {
+        throw new BadRequestException('Payment initiation failed');
+      }
       return {
         checkoutUrl: `https://sandbox.paymongo.com/checkout/${params.reference}`,
         providerReference: `src_mock_${params.reference}`,
@@ -107,7 +113,17 @@ export class PayMongoAdapter implements PaymentAdapter {
     }
   }
 
-  async verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
+  verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
+    if (!signature) {
+      this.logger.warn('PayMongo webhook missing signature');
+      return Promise.resolve({
+        isValid: false,
+        providerReference: '',
+        amountInCents: 0n,
+        status: 'FAILED',
+      });
+    }
+
     // PayMongo sends: paymongo-signature: t=<timestamp>,li=<hmac>,te=<hmac>
     const parts = Object.fromEntries(
       signature.split(',').map((part) => {
@@ -122,11 +138,27 @@ export class PayMongoAdapter implements PaymentAdapter {
     const message = `${timestamp}.${payload.toString('utf8')}`;
     const expected = createHmac('sha256', this.webhookSecret).update(message).digest('hex');
 
-    const isValid = expected === testHmac;
+    const expectedBuf = Buffer.from(expected, 'hex');
+    const receivedBuf = Buffer.from(testHmac, 'hex');
+
+    let isValid = false;
+    try {
+      isValid =
+        expectedBuf.length > 0 &&
+        expectedBuf.length === receivedBuf.length &&
+        timingSafeEqual(expectedBuf, receivedBuf);
+    } catch {
+      isValid = false;
+    }
 
     if (!isValid) {
       this.logger.warn('PayMongo webhook signature mismatch');
-      return { isValid: false, providerReference: '', amountInCents: 0n, status: 'FAILED' };
+      return Promise.resolve({
+        isValid: false,
+        providerReference: '',
+        amountInCents: 0n,
+        status: 'FAILED',
+      });
     }
 
     const event = JSON.parse(payload.toString('utf8')) as {
@@ -151,11 +183,11 @@ export class PayMongoAdapter implements PaymentAdapter {
     const status: WebhookVerifyResult['status'] =
       paymongoStatus === 'chargeable' || paymongoStatus === 'paid' ? 'SUCCESS' : 'FAILED';
 
-    return {
+    return Promise.resolve({
       isValid: true,
       providerReference: source.id,
       amountInCents,
       status,
-    };
+    });
   }
 }

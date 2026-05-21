@@ -1,145 +1,159 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchUsers, banUser, unbanUser } from '@/lib/api';
+import { clsx } from 'clsx';
 
-interface User {
-  id: string;
-  email: string;
-  username: string;
-  role: string;
-  status: string;
-  kycStatus: string;
-  vipLevel: string;
-  createdAt: string;
-  wallet: { balanceInCents: string; currency: string } | null;
-}
+// TODO: Replace with real API data from admin-api GET /users
+const MOCK_USERS = [
+  { id: 'u001', username: 'cyber_wolf99', email: 'wolf99@test.com', vipLevel: 3, status: 'ACTIVE', kycStatus: 'VERIFIED', balance: 4820.50, registered: '2024-01-15' },
+  { id: 'u002', username: 'neon_panda42', email: 'panda42@test.com', vipLevel: 5, status: 'ACTIVE', kycStatus: 'VERIFIED', balance: 12340.00, registered: '2023-11-08' },
+  { id: 'u003', username: 'slot_master7', email: 'slotm7@test.com', vipLevel: 1, status: 'SUSPENDED', kycStatus: 'PENDING', balance: 150.00, registered: '2024-03-22' },
+  { id: 'u004', username: 'dragon_queen', email: 'dqueen@test.com', vipLevel: 4, status: 'ACTIVE', kycStatus: 'VERIFIED', balance: 7650.75, registered: '2023-09-30' },
+  { id: 'u005', username: 'suspicious_x1', email: 'susx1@test.com', vipLevel: 0, status: 'BANNED', kycStatus: 'REJECTED', balance: 0, registered: '2024-05-01' },
+  { id: 'u006', username: 'lucky_star88', email: 'lstar88@test.com', vipLevel: 2, status: 'ACTIVE', kycStatus: 'VERIFIED', balance: 3200.00, registered: '2024-02-14' },
+  { id: 'u007', username: 'jackpot_king', email: 'jpking@test.com', vipLevel: 5, status: 'ACTIVE', kycStatus: 'VERIFIED', balance: 98420.00, registered: '2023-07-01' },
+  { id: 'u008', username: 'new_player01', email: 'newp01@test.com', vipLevel: 0, status: 'ACTIVE', kycStatus: 'NONE', balance: 100.00, registered: '2024-06-10' },
+  { id: 'u009', username: 'highroller_z', email: 'hrollz@test.com', vipLevel: 4, status: 'ACTIVE', kycStatus: 'VERIFIED', balance: 55000.00, registered: '2023-12-01' },
+  { id: 'u010', username: 'retro_gamer_x', email: 'retrogx@test.com', vipLevel: 1, status: 'SUSPENDED', kycStatus: 'PENDING', balance: 220.00, registered: '2024-04-18' },
+];
+
+const statusBadge = (status: string) => {
+  const map: Record<string, string> = {
+    ACTIVE: 'bg-neon-green/10 text-neon-green border-neon-green/30',
+    SUSPENDED: 'bg-neon-orange/10 text-neon-orange border-neon-orange/30',
+    BANNED: 'bg-neon-red/10 text-neon-red border-neon-red/30',
+  };
+  return map[status] ?? 'bg-gray-700 text-gray-300 border-gray-600';
+};
+
+const kycBadge = (status: string) => {
+  const map: Record<string, string> = {
+    VERIFIED: 'bg-neon-green/10 text-neon-green border-neon-green/30',
+    PENDING: 'bg-gold/10 text-gold border-gold/30',
+    REJECTED: 'bg-neon-red/10 text-neon-red border-neon-red/30',
+    NONE: 'bg-gray-700/30 text-gray-400 border-gray-600',
+  };
+  return map[status] ?? 'bg-gray-700 text-gray-300 border-gray-600';
+};
 
 export default function UsersPage() {
-  const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterKyc, setFilterKyc] = useState('ALL');
   const [page, setPage] = useState(1);
+  const perPage = 5;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', page, search],
-    queryFn: () => fetchUsers(page, 20, search || undefined),
+  const filtered = MOCK_USERS.filter((u) => {
+    const matchSearch = !search || u.username.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === 'ALL' || u.status === filterStatus;
+    const matchKyc = filterKyc === 'ALL' || u.kycStatus === filterKyc;
+    return matchSearch && matchStatus && matchKyc;
   });
 
-  const banMutation = useMutation({
-    mutationFn: ({ userId, reason }: { userId: string; reason: string }) =>
-      banUser(userId, reason),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-users'] }),
-  });
-
-  const unbanMutation = useMutation({
-    mutationFn: (userId: string) => unbanUser(userId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-users'] }),
-  });
-
-  const users: User[] = data?.items ?? [];
-  const total: number = data?.total ?? 0;
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+  const totalPages = Math.ceil(filtered.length / perPage);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold text-panda-white">Users</h1>
-        <span className="text-panda-white/40 font-heading text-sm">{total} total</span>
+      <h2 className="font-heading text-2xl font-bold text-panda-white">Users Management</h2>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <input
+          type="text"
+          placeholder="Search username or email…"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="bg-dark-card border border-dark-border focus:border-neon-orange/60 rounded-lg px-4 py-2 text-sm text-panda-white placeholder-gray-600 outline-none w-64"
+        />
+        <select
+          value={filterStatus}
+          onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+          className="bg-dark-card border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-300 outline-none"
+        >
+          <option value="ALL">All Status</option>
+          <option value="ACTIVE">Active</option>
+          <option value="SUSPENDED">Suspended</option>
+          <option value="BANNED">Banned</option>
+        </select>
+        <select
+          value={filterKyc}
+          onChange={(e) => { setFilterKyc(e.target.value); setPage(1); }}
+          className="bg-dark-card border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-300 outline-none"
+        >
+          <option value="ALL">All KYC</option>
+          <option value="VERIFIED">Verified</option>
+          <option value="PENDING">Pending</option>
+          <option value="REJECTED">Rejected</option>
+          <option value="NONE">None</option>
+        </select>
       </div>
 
-      {/* Search */}
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-        placeholder="Search by email or username..."
-        className="w-full max-w-sm bg-dark-card/80 border border-dark-border rounded-xl px-4 py-2.5
-                   text-panda-white text-sm font-body focus:border-neon-cyan/40 focus:outline-none"
-      />
-
       {/* Table */}
-      <div className="glass-card border-dark-border overflow-hidden">
+      <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-sm font-body">
             <thead>
-              <tr className="border-b border-dark-border">
-                {['Username', 'Email', 'Status', 'KYC', 'VIP', 'Balance', 'Actions'].map((h) => (
-                  <th key={h} className="text-left px-4 py-3 font-heading text-xs text-panda-white/40 uppercase tracking-wider">
-                    {h}
-                  </th>
+              <tr className="border-b border-dark-border text-left">
+                {['ID', 'Username', 'Email', 'VIP', 'Status', 'KYC', 'Balance', 'Registered', 'Actions'].map((h) => (
+                  <th key={h} className="px-4 py-3 text-xs text-gray-400 uppercase tracking-wider font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr><td colSpan={7} className="text-center py-8 text-panda-white/30 font-heading">Loading...</td></tr>
-              ) : users.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-8 text-panda-white/30 font-heading">No users found</td></tr>
-              ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="border-b border-dark-border/30 hover:bg-white/3 transition-colors">
-                    <td className="px-4 py-3 font-heading font-bold text-panda-white text-sm">{user.username}</td>
-                    <td className="px-4 py-3 text-panda-white/60 text-sm font-body">{user.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded font-heading text-xs font-bold ${
-                        user.status === 'ACTIVE' ? 'bg-neon-green/10 text-neon-green' :
-                        user.status === 'BANNED' ? 'bg-neon-pink/10 text-neon-pink' :
-                        'bg-panda-white/10 text-panda-white/50'
-                      }`}>
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-panda-white/50 text-xs font-heading">{user.kycStatus}</td>
-                    <td className="px-4 py-3 text-neon-cyan/70 text-xs font-heading">{user.vipLevel}</td>
-                    <td className="px-4 py-3 text-panda-white/70 text-sm font-heading">
-                      {user.wallet ? `₱${(Number(user.wallet.balanceInCents) / 100).toFixed(2)}` : '—'}
-                    </td>
-                    <td className="px-4 py-3 flex gap-2">
-                      {user.status === 'ACTIVE' ? (
-                        <button
-                          onClick={() => banMutation.mutate({ userId: user.id, reason: 'Admin action' })}
-                          className="admin-btn bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20"
-                        >
-                          Ban
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => unbanMutation.mutate(user.id)}
-                          className="admin-btn bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20"
-                        >
-                          Unban
-                        </button>
+              {paginated.map((u) => (
+                <tr key={u.id} className="border-b border-dark-border/50 hover:bg-neon-orange/5 transition-colors">
+                  <td className="px-4 py-3 text-gray-500 text-xs">{u.id}</td>
+                  <td className="px-4 py-3 text-panda-white font-medium">{u.username}</td>
+                  <td className="px-4 py-3 text-gray-400">{u.email}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-gold font-semibold">★ {u.vipLevel}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={clsx('px-2 py-0.5 rounded border text-xs font-medium', statusBadge(u.status))}>
+                      {u.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={clsx('px-2 py-0.5 rounded border text-xs font-medium', kycBadge(u.kycStatus))}>
+                      {u.kycStatus}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-neon-green font-mono">${u.balance.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{u.registered}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      {/* TODO: wire up actions to admin-api */}
+                      <button className="text-xs text-neon-cyan hover:underline">View</button>
+                      {u.status === 'ACTIVE' && (
+                        <button className="text-xs text-neon-orange hover:underline">Suspend</button>
                       )}
-                    </td>
-                  </tr>
-                ))
-              )}
+                      {u.status !== 'BANNED' && (
+                        <button className="text-xs text-neon-red hover:underline">Ban</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
         {/* Pagination */}
-        {total > 20 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-dark-border">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="admin-btn bg-dark-card border border-dark-border text-panda-white/60 disabled:opacity-30"
-            >
-              ← Prev
+        <div className="flex items-center justify-between px-4 py-3 border-t border-dark-border">
+          <span className="text-xs text-gray-500">{filtered.length} users</span>
+          <div className="flex gap-2">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1 text-xs rounded border border-dark-border text-gray-400 hover:border-neon-orange/40 disabled:opacity-30 transition-colors">
+              Prev
             </button>
-            <span className="text-panda-white/40 font-heading text-xs">
-              Page {page} of {Math.ceil(total / 20)}
-            </span>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page * 20 >= total}
-              className="admin-btn bg-dark-card border border-dark-border text-panda-white/60 disabled:opacity-30"
-            >
-              Next →
+            <span className="px-3 py-1 text-xs text-gray-400">{page} / {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-3 py-1 text-xs rounded border border-dark-border text-gray-400 hover:border-neon-orange/40 disabled:opacity-30 transition-colors">
+              Next
             </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug'],
+    logger: ['error', 'warn', 'log'],
   });
 
   const configService = app.get(ConfigService);
@@ -32,7 +32,6 @@ async function bootstrap(): Promise<void> {
   });
 
   app.setGlobalPrefix('api/v1');
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -41,24 +40,21 @@ async function bootstrap(): Promise<void> {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
-
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor(), new TransformInterceptor());
 
   if (nodeEnv !== 'production') {
-    const config = new DocumentBuilder()
+    const swaggerConfig = new DocumentBuilder()
       .setTitle('PandaNG Game Service')
-      .setDescription('Game sessions, provably fair RNG, and bet resolution')
+      .setDescription('Game Sessions & Outcomes API')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swaggerConfig));
   }
 
   app.enableShutdownHooks();
-
-  app.getHttpAdapter().get('/health', (_req: unknown, res: { json: (data: object) => void }) => {
+  app.getHttpAdapter().get('/health', (_req: unknown, res: { json: (d: object) => void }) => {
     res.json({ status: 'ok', service: 'game', timestamp: new Date().toISOString() });
   });
 

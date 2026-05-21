@@ -49,12 +49,12 @@ export default function WheelPage() {
       const segIdx = outcome.segmentIndex as number;
 
       // Spin to the landed segment
-      const segMidAngle = getSegmentAngle(segIdx) + SEGMENT_ANGLES[segIdx]! / 2;
+      const segMidAngle = getSegmentAngle(segIdx) + SEGMENT_ANGLES[segIdx] / 2;
       const spinDegrees = 360 * 8 + (360 - segMidAngle);
       setRotation((prev) => prev + spinDegrees);
 
       setTimeout(() => {
-        const seg = SEGMENTS[segIdx]!;
+        const seg = SEGMENTS[segIdx];
         setLandedSegment(seg);
         const win = BigInt(outcome.winAmountInCents as string);
         if (win > 0n) incrementBalance(win);

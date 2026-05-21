@@ -1,8 +1,8 @@
-# ── Base ────────────────────────────────────────────────────────────────────────
+# ── Base ─────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat && corepack enable
 
-# ── Install stage ──────────────────────────────────────────────────────────────
+# ── Install stage ─────────────────────────────────────────────────────────────
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml ./
@@ -13,7 +13,7 @@ COPY packages/game-sdk/package.json ./packages/game-sdk/
 COPY services/game/package.json ./services/game/
 RUN pnpm install --frozen-lockfile
 
-# ── Build stage ─────────────────────────────────────────────────────────────────
+# ── Build stage ───────────────────────────────────────────────────────────────
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -24,13 +24,13 @@ RUN pnpm --filter @panda-ng/types run build && \
     pnpm --filter @panda-ng/game-sdk run build && \
     pnpm --filter @panda-ng/game-service run build
 
-# ── Deploy stage ─────────────────────────────────────────────────────────────────
+# ── Deploy stage ──────────────────────────────────────────────────────────────
 FROM base AS deployer
 WORKDIR /app
 COPY --from=builder /app .
 RUN pnpm deploy --filter=@panda-ng/game-service --prod /deploy
 
-# ── Production stage ───────────────────────────────────────────────────────────
+# ── Production stage ──────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

@@ -229,8 +229,11 @@ export class AuthService {
     return { message: 'If an account exists with this email, a reset link has been sent.' };
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  resetPassword(token: string, newPassword: string): { message: string } {
     // TODO: Validate reset token from Redis
+    if (!newPassword) {
+      throw new BadRequestException('New password is required');
+    }
     this.logger.log(`Password reset attempted with token: ${token.substring(0, 8)}...`);
     throw new BadRequestException(
       'Password reset via token not yet fully implemented. Please contact support.',

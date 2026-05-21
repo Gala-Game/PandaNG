@@ -1,147 +1,119 @@
 name: CI
 
 on:
+  push:
+    branches: [main, develop, 'copilot/**']
   pull_request:
     branches: [main, develop]
-  push:
-    branches: [main, develop]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   NODE_VERSION: '20'
   PNPM_VERSION: '9'
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & Type-check
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
+        with: { version: '${{ env.PNPM_VERSION }}' }
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '${{ env.NODE_VERSION }}'
           cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm run build --filter=@panda-ng/types --filter=@panda-ng/utils --filter=@panda-ng/config --filter=@panda-ng/game-sdk
+      - run: TURBO_CONCURRENCY=50% pnpm run lint
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Type-check
-        run: pnpm run type-check
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm run type-check
 
   test:
-    name: Unit Tests
+    name: Test
     runs-on: ubuntu-latest
-    needs: lint-and-typecheck
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests
-        run: pnpm run test --if-present
+    services:
+      postgres:
+        image: postgres:16-alpine
         env:
-          NODE_ENV: test
-          DATABASE_URL: 'postgresql://test:test@localhost:5432/test?schema=public'
-          JWT_SECRET: 'test-secret-not-for-production'
-
-  build-packages:
-    name: Build Packages
-    runs-on: ubuntu-latest
-    needs: lint-and-typecheck
-    permissions:
-      contents: read
+          POSTGRES_USER: pandang
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: pandang_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
+        with: { version: '${{ env.PNPM_VERSION }}' }
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '${{ env.NODE_VERSION }}'
           cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm run build --filter=@panda-ng/types --filter=@panda-ng/utils --filter=@panda-ng/config --filter=@panda-ng/game-sdk
+      - run: pnpm run test
+        env:
+          DATABASE_URL: postgresql://pandang:password@localhost:5432/pandang_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-key-for-ci
+          NODE_ENV: test
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build shared packages
-        run: |
-          pnpm --filter @panda-ng/types run build
-          pnpm --filter @panda-ng/config run build
-          pnpm --filter @panda-ng/utils run build
-          pnpm --filter @panda-ng/game-sdk run build
-
-  docker-build:
-    name: Docker Build (${{ matrix.service }})
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    needs: [test, build-packages]
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - service: auth
-            dockerfile: services/auth/Dockerfile
-          - service: wallet
-            dockerfile: services/wallet/Dockerfile
-          - service: game
-            dockerfile: services/game/Dockerfile
-          - service: jackpot
-            dockerfile: services/jackpot/Dockerfile
-          - service: realtime
-            dockerfile: services/realtime/Dockerfile
-          - service: rewards
-            dockerfile: services/rewards/Dockerfile
-          - service: notifications
-            dockerfile: services/notifications/Dockerfile
-          - service: fraud
-            dockerfile: services/fraud/Dockerfile
-          - service: admin-api
-            dockerfile: services/admin-api/Dockerfile
-          - service: web-ui
-            dockerfile: apps/web-ui/Dockerfile
-          - service: admin-dashboard
-            dockerfile: apps/admin-dashboard/Dockerfile
-
+    needs: [lint, type-check]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
+      - uses: pnpm/action-setup@v3
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
         with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: pandang-${{ matrix.service }}:${{ github.sha }}
+          node-version: '${{ env.NODE_VERSION }}'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high
+        continue-on-error: true

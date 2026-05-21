@@ -219,10 +219,17 @@ services:
     restart: unless-stopped
     ports:
       - '3009:3009'
-    env_file:
-      - .env
     environment:
       PORT: 3009
+      NODE_ENV: development
+      DATABASE_URL: postgresql://pandang:password@postgres:5432/pandang_db
+      DATABASE_DIRECT_URL: postgresql://pandang:password@postgres:5432/pandang_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      WALLET_SERVICE_URL: http://wallet:3002
+      JACKPOT_SERVICE_URL: http://jackpot:3003
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-me-in-production}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3010
     depends_on:
       postgres:
         condition: service_healthy
@@ -230,26 +237,12 @@ services:
         condition: service_healthy
     networks:
       - panda-ng-network
-
-  admin-dashboard:
-    build:
-      context: .
-      dockerfile: apps/admin-dashboard/Dockerfile
-    container_name: pandang-admin-dashboard
-    restart: unless-stopped
-    ports:
-      - '3010:3010'
-    env_file:
-      - .env
-    environment:
-      PORT: 3010
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - panda-ng-network
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3009/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # ── Apps ────────────────────────────────────────────────────────────────────
 
@@ -274,3 +267,21 @@ services:
       - panda-ng-network
 
 
+
+  admin-dashboard:
+    build:
+      context: .
+      dockerfile: apps/admin-dashboard/Dockerfile
+    container_name: pandang-admin-dashboard
+    restart: unless-stopped
+    ports:
+      - '3010:3010'
+    environment:
+      PORT: 3010
+      NODE_ENV: production
+      NEXT_PUBLIC_ADMIN_API_URL: http://admin-api:3008/api/v1
+      NEXT_PUBLIC_GAME_ENGINE_URL: http://game:3009/api/v1
+    depends_on:
+      - admin-api
+    networks:
+      - panda-ng-network

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { buildPaginatedResult, normalizePagination, getPaginationOffset } from '@panda-ng/utils';
 import { NotificationType, NotificationChannel } from '@panda-ng/types';
 import type { PushPayload, RegisterPushTokenDto } from '@panda-ng/types';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
@@ -64,7 +65,7 @@ export class NotificationsService {
     channel = NotificationChannel.IN_APP,
   ) {
     const notification = await this.prisma.notification.create({
-      data: { userId, type, channel, title, body, data, sentAt: new Date() },
+      data: { userId, type, channel, title, body, data: data as Prisma.InputJsonValue | undefined, sentAt: new Date() },
     });
 
     if (channel === NotificationChannel.PUSH) {
@@ -98,10 +99,16 @@ export class NotificationsService {
       select: { token: true },
     });
 
-    await Promise.all(tokens.map(({ token }) => this.sendPush({ ...payload, token })));
+    for (const { token } of tokens) {
+      try {
+        this.sendPush({ ...payload, token });
+      } catch (error) {
+        this.logger.error('Failed to queue push notification', error);
+      }
+    }
   }
 
-  private async sendPush(payload: PushPayload): Promise<void> {
+  private sendPush(payload: PushPayload): void {
     const firebaseProjectId = process.env['FIREBASE_PROJECT_ID'];
     if (!firebaseProjectId) {
       this.logger.warn('Firebase not configured — skipping push notification');

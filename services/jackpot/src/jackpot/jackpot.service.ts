@@ -5,7 +5,7 @@ import { JackpotGateway } from './jackpot.gateway';
 import { RedisService } from './redis.service';
 import { ContributeDto } from './dto/contribute.dto';
 import type { JackpotTickPayload, JackpotWinPayload } from '@panda-ng/types';
-import { JackpotTier, SocketEvents } from '@panda-ng/types';
+import { JackpotTier } from '@panda-ng/types';
 
 @Injectable()
 export class JackpotService {

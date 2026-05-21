@@ -6,91 +6,67 @@ import {
   Param,
   Query,
   UseGuards,
-  Request,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { GameService } from './game.service';
-import {
-  StartSessionDto,
-  ResolveSlotsDto,
-  ResolveCrashDto,
-  ResolveDiceDto,
-  ResolveWheelDto,
-  ResolveTreasureDto,
-} from './dto/game.dto';
-
-interface AuthRequest {
-  user: { sub: string };
-}
+import { StartGameDto } from './dto/start-game.dto';
+import { ResolveGameDto } from './dto/resolve-game.dto';
+import { JwtAuthGuard } from './guards/jwt.guard';
+import { CurrentUser, JwtUser } from './decorators/current-user.decorator';
 
 @ApiTags('games')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('games')
 export class GameController {
   constructor(private readonly gameService: GameService) {}
 
+  @Post('start')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Start a game session and debit bet from wallet' })
+  startSession(@CurrentUser() user: JwtUser, @Body() dto: StartGameDto) {
+    return this.gameService.startSession(user.sub, dto);
+  }
+
+  @Post(':sessionId/resolve')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resolve session — calculates outcome and credits win' })
+  resolveSession(
+    @CurrentUser() user: JwtUser,
+    @Param('sessionId') sessionId: string,
+    @Body() dto: ResolveGameDto,
+  ) {
+    return this.gameService.resolveSession(user.sub, sessionId, dto);
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user game history' })
+  getUserSessions(
+    @CurrentUser() user: JwtUser,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.gameService.getUserSessions(user.sub, page, Math.min(limit, 100));
+  }
+
   @Get('rtp-profiles')
-  @ApiOperation({ summary: 'List active RTP profiles' })
-  @ApiQuery({ name: 'gameType', required: false })
+  @ApiOperation({ summary: 'Get active RTP profiles' })
   getRTPProfiles(@Query('gameType') gameType?: string) {
     return this.gameService.getRTPProfiles(gameType);
   }
 
-  @Post('session/start')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Start a game session and deduct bet from wallet' })
-  startSession(@Request() req: AuthRequest, @Body() dto: StartSessionDto) {
-    return this.gameService.startSession(
-      req.user.sub,
-      dto.gameType,
-      dto.betAmountInCents,
-      dto.clientSeed,
-      dto.rtpProfileId,
-    );
-  }
-
-  @Post('session/resolve/slots')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resolve a slots session' })
-  resolveSlots(@Request() req: AuthRequest, @Body() dto: ResolveSlotsDto) {
-    return this.gameService.resolveSlots(req.user.sub, dto.sessionId);
-  }
-
-  @Post('session/resolve/crash')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resolve a crash session (cash out)' })
-  resolveCrash(@Request() req: AuthRequest, @Body() dto: ResolveCrashDto) {
-    return this.gameService.resolveCrash(req.user.sub, dto.sessionId, dto.cashoutMultiplier);
-  }
-
-  @Post('session/resolve/dice')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resolve a dice session' })
-  resolveDice(@Request() req: AuthRequest, @Body() dto: ResolveDiceDto) {
-    return this.gameService.resolveDice(req.user.sub, dto.sessionId, dto.target, dto.mode);
-  }
-
-  @Post('session/resolve/wheel')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resolve a spin-wheel session' })
-  resolveWheel(@Request() req: AuthRequest, @Body() dto: ResolveWheelDto) {
-    return this.gameService.resolveWheel(req.user.sub, dto.sessionId);
-  }
-
-  @Post('session/resolve/treasure')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resolve a treasure hunt session' })
-  resolveTreasure(@Request() req: AuthRequest, @Body() dto: ResolveTreasureDto) {
-    return this.gameService.resolveTreasure(req.user.sub, dto.sessionId, dto.pickedIndices);
-  }
-
-  @Get('session/:id/verify')
-  @ApiOperation({ summary: 'Provably fair verification: reveal server seed and verify outcome' })
-  verifySession(@Param('id') sessionId: string) {
-    return this.gameService.verifySession(sessionId);
+  @Get(':sessionId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get session details' })
+  getSession(@CurrentUser() user: JwtUser, @Param('sessionId') sessionId: string) {
+    return this.gameService.getSession(user.sub, sessionId);
   }
 }
