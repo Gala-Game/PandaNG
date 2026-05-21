@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const ADMIN_API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_URL ?? 'http://localhost:3008';
-const GAME_ENGINE_BASE = process.env.NEXT_PUBLIC_GAME_ENGINE_URL ?? 'http://localhost:3001';
-const PAYMENT_BASE = process.env.NEXT_PUBLIC_PAYMENT_URL ?? 'http://localhost:3003';
+const ADMIN_API_BASE = process.env['NEXT_PUBLIC_ADMIN_API_URL'] ?? 'http://localhost:3008';
+const GAME_ENGINE_BASE = process.env['NEXT_PUBLIC_GAME_ENGINE_URL'] ?? 'http://localhost:3009/api/v1';
+const PAYMENT_BASE = process.env['NEXT_PUBLIC_PAYMENT_URL'] ?? 'http://localhost:3002/api/v1';
 
 export const adminApiClient = axios.create({
   baseURL: ADMIN_API_BASE,
@@ -164,5 +164,11 @@ export async function rejectWithdrawal(id: string, reason: string) {
 /** TODO: wire up to admin-api GET /dashboard/stats */
 export async function fetchDashboardStats() {
   const { data } = await adminApiClient.get('/dashboard/stats');
+  return data;
+}
+
+/** TODO: wire up to admin-api GET /liveops/configs */
+export async function fetchLiveOpsConfigs(environment = 'production') {
+  const { data } = await adminApiClient.get('/liveops/configs', { params: { environment } });
   return data;
 }

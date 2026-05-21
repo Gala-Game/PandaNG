@@ -29,6 +29,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin-dashboard/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin-dashboard/.next/static ./apps/admin-dashboard/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/admin-dashboard/public ./apps/admin-dashboard/public
 USER nextjs
 EXPOSE 3010
 ENV PORT=3010

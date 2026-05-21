@@ -228,6 +228,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       WALLET_SERVICE_URL: http://wallet:3002
       JACKPOT_SERVICE_URL: http://jackpot:3003
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-me-in-production}
       CORS_ORIGINS: http://localhost:3000,http://localhost:3010
     depends_on:
       postgres:
@@ -237,7 +238,7 @@ services:
     networks:
       - panda-ng-network
     healthcheck:
-      test: ['CMD-SHELL', 'curl -f http://localhost:3009/health || exit 1']
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3009/health || exit 1']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -279,7 +280,7 @@ services:
       PORT: 3010
       NODE_ENV: production
       NEXT_PUBLIC_ADMIN_API_URL: http://admin-api:3008/api/v1
-      NEXT_PUBLIC_GAME_URL: http://game:3009/api/v1
+      NEXT_PUBLIC_GAME_ENGINE_URL: http://game:3009/api/v1
     depends_on:
       - admin-api
     networks:

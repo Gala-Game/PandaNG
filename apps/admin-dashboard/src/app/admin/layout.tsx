@@ -3,15 +3,20 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAdminAuthStore } from '@/store/admin-auth.store';
+import { setAdminAuthToken } from '@/lib/api';
 import AdminSidebar from '@/components/AdminSidebar';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated, admin, logout } = useAdminAuthStore();
+  const { isAuthenticated, admin, token, logout } = useAdminAuthStore();
 
   useEffect(() => {
     if (!isAuthenticated) router.push('/login');
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    setAdminAuthToken(token);
+  }, [token]);
 
   if (!isAuthenticated) return null;
 

@@ -8,7 +8,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor() {
     super({
       log: [
-        { emit: 'event', level: 'query' },
         { emit: 'stdout', level: 'error' },
         { emit: 'stdout', level: 'warn' },
       ],
@@ -22,7 +21,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('Disconnecting from database...');
     await this.$disconnect();
   }
 }

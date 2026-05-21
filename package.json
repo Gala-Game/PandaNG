@@ -9,29 +9,24 @@
     "test": "turbo run test",
     "type-check": "turbo run type-check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:migrate": "prisma migrate deploy",
-    "db:generate": "prisma generate"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
+    "eslint": "^8.57.0",
     "prettier": "^3.2.0",
     "prettier-plugin-tailwindcss": "^0.6.0",
-    "typescript": "^5.4.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.57.0",
-    "tsx": "^4.7.0",
-    "@prisma/client": "^5.13.0",
-    "prisma": "^5.13.0"
+    "prisma": "5.22.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
   },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "dependencies": {
+    "@prisma/client": "5.22.0"
+  }
 }

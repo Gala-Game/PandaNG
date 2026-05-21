@@ -1,126 +1,185 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchPendingWithdrawals, approveWithdrawal, rejectWithdrawal } from '@/lib/api';
 
 interface Withdrawal {
   id: string;
-  userId: string;
-  amountInCents: string;
-  status: string;
+  username: string;
+  amountInCents: number;
   provider: string;
-  reference: string;
-  createdAt: string;
-  user: { username: string; email: string; kycStatus: string };
+  status: 'PENDING' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
+  fraudScore: number;
+  accountDetails: string;
+  requestedAt: string;
+}
+
+const MOCK: Withdrawal[] = [
+  { id: 'W001', username: 'lucky_panda',   amountInCents: 1500000, provider: 'GCash',  status: 'PENDING',      fraudScore: 12,  accountDetails: '09***4567', requestedAt: '2026-05-12T07:00:00Z' },
+  { id: 'W002', username: 'bamboo_king',   amountInCents: 5000000, provider: 'Maya',   status: 'UNDER_REVIEW', fraudScore: 68,  accountDetails: '09***9012', requestedAt: '2026-05-12T06:30:00Z' },
+  { id: 'W003', username: 'panda_rush',    amountInCents: 250000,  provider: 'GCash',  status: 'APPROVED',     fraudScore: 5,   accountDetails: '09***3456', requestedAt: '2026-05-11T22:00:00Z' },
+  { id: 'W004', username: 'neon_roller',   amountInCents: 10000000,provider: 'BDO',    status: 'UNDER_REVIEW', fraudScore: 85,  accountDetails: '012***789', requestedAt: '2026-05-11T20:00:00Z' },
+  { id: 'W005', username: 'crystal_bet',  amountInCents: 750000,  provider: 'Stripe', status: 'COMPLETED',    fraudScore: 8,   accountDetails: 'Visa****1234', requestedAt: '2026-05-10T15:00:00Z' },
+  { id: 'W006', username: 'red_panda_77', amountInCents: 300000,  provider: 'GCash',  status: 'REJECTED',     fraudScore: 91,  accountDetails: '09***0000', requestedAt: '2026-05-10T10:00:00Z' },
+  { id: 'W007', username: 'jackpot_god',  amountInCents: 20000000,provider: 'BPI',    status: 'PENDING',      fraudScore: 22,  accountDetails: '012***456', requestedAt: '2026-05-12T08:00:00Z' },
+  { id: 'W008', username: 'spinning_leo', amountInCents: 500000,  provider: 'Maya',   status: 'APPROVED',     fraudScore: 3,   accountDetails: '09***7890', requestedAt: '2026-05-09T18:00:00Z' },
+];
+
+const STATUS_STYLES: Record<Withdrawal['status'], string> = {
+  PENDING:      'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  UNDER_REVIEW: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  APPROVED:     'bg-green-500/20 text-green-300 border-green-500/30',
+  REJECTED:     'bg-red-500/20 text-red-300 border-red-500/30',
+  COMPLETED:    'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+};
+
+function fraudBadge(score: number) {
+  if (score < 30) return <span className="text-green-400 text-xs">{score}</span>;
+  if (score < 60) return <span className="text-yellow-400 text-xs">{score}</span>;
+  return <span className="text-red-400 text-xs font-bold">{score} ⚠️</span>;
 }
 
 export default function WithdrawalsPage() {
-  const qc = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
+  const [withdrawals, setWithdrawals] = useState(MOCK);
+  const [filter, setFilter] = useState<Withdrawal['status'] | 'ALL'>('ALL');
+  const [confirmModal, setConfirmModal] = useState<{ id: string; action: 'APPROVE' | 'REJECT' } | null>(null);
+  const [note, setNote] = useState('');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-withdrawals', page],
-    queryFn: () => fetchPendingWithdrawals(page, 20),
-  });
+  const filtered = filter === 'ALL' ? withdrawals : withdrawals.filter((w) => w.status === filter);
 
-  const approveMutation = useMutation({
-    mutationFn: ({ id, notes }: { id: string; notes?: string }) => approveWithdrawal(id, notes),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-withdrawals'] }),
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => rejectWithdrawal(id, reason),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-withdrawals'] }),
-  });
-
-  const withdrawals: Withdrawal[] = data?.items ?? [];
-  const total: number = data?.total ?? 0;
+  const handleAction = () => {
+    if (!confirmModal) return;
+    setWithdrawals((prev) =>
+      prev.map((w) =>
+        w.id === confirmModal.id
+          ? { ...w, status: confirmModal.action === 'APPROVE' ? 'APPROVED' : 'REJECTED' }
+          : w,
+      ),
+    );
+    setConfirmModal(null);
+    setNote('');
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold text-panda-white">Pending Withdrawals</h1>
-        <span className="px-3 py-1 rounded-lg bg-neon-pink/10 text-neon-pink font-heading text-sm border border-neon-pink/20">
-          {total} pending
-        </span>
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-black text-white">Withdrawals</h1>
+          <p className="mt-1 text-sm text-gray-400">Review and process withdrawal requests</p>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {isLoading ? (
-          <div className="text-center py-8 text-panda-white/30 font-heading">Loading...</div>
-        ) : withdrawals.length === 0 ? (
-          <div className="glass-card p-8 text-center border-dark-border">
-            <div className="text-4xl mb-2">✅</div>
-            <div className="font-heading text-panda-white/50">No pending withdrawals</div>
-          </div>
-        ) : (
-          withdrawals.map((w) => (
-            <div key={w.id} className="glass-card p-5 border-dark-border space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-3">
-                    <span className="font-heading font-bold text-panda-white">{w.user.username}</span>
-                    <span className={`text-xs font-heading px-2 py-0.5 rounded ${
-                      w.user.kycStatus === 'VERIFIED' ? 'bg-neon-green/10 text-neon-green' : 'bg-neon-pink/10 text-neon-pink'
-                    }`}>
-                      KYC: {w.user.kycStatus}
-                    </span>
-                  </div>
-                  <div className="text-panda-white/50 text-sm font-body">{w.user.email}</div>
-                  <div className="text-panda-white/30 text-xs font-heading">
-                    via {w.provider} · {new Date(w.createdAt).toLocaleString()}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-heading font-bold text-xl neon-text-gold">
-                    ₱{(Number(w.amountInCents) / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-panda-white/30 text-xs font-heading mt-0.5">{w.reference}</div>
-                </div>
-              </div>
+      {/* Filter tabs */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(['ALL', 'PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'COMPLETED'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setFilter(s)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+              filter === s
+                ? 'bg-orange-500 text-white'
+                : 'border border-white/10 text-gray-400 hover:bg-white/10'
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  placeholder="Notes (optional)"
-                  value={notesMap[w.id] ?? ''}
-                  onChange={(e) => setNotesMap((prev) => ({ ...prev, [w.id]: e.target.value }))}
-                  className="flex-1 bg-deep-black/60 border border-dark-border rounded-lg px-3 py-2
-                             text-panda-white text-sm font-body focus:border-neon-cyan/30 focus:outline-none"
-                />
-                <button
-                  onClick={() => approveMutation.mutate({ id: w.id, notes: notesMap[w.id] })}
-                  disabled={approveMutation.isPending}
-                  className="admin-btn bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 whitespace-nowrap"
-                >
-                  ✓ Approve
-                </button>
-                <button
-                  onClick={() => rejectMutation.mutate({ id: w.id, reason: notesMap[w.id] ?? 'Rejected by admin' })}
-                  disabled={rejectMutation.isPending}
-                  className="admin-btn bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 whitespace-nowrap"
-                >
-                  ✗ Reject
-                </button>
-              </div>
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/5 backdrop-blur-md">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-white/10 text-xs uppercase text-gray-500">
+              <th className="px-4 py-3 text-left">User</th>
+              <th className="px-4 py-3 text-left">Amount</th>
+              <th className="px-4 py-3 text-left">Provider</th>
+              <th className="px-4 py-3 text-left">Account</th>
+              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Fraud Score</th>
+              <th className="px-4 py-3 text-left">Requested</th>
+              <th className="px-4 py-3 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {filtered.map((w) => (
+              <tr key={w.id} className="hover:bg-white/5 transition-colors">
+                <td className="px-4 py-3 font-medium">{w.username}</td>
+                <td className="px-4 py-3 font-heading font-bold text-white">
+                  ₱{(w.amountInCents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="px-4 py-3 text-gray-300">{w.provider}</td>
+                <td className="px-4 py-3 text-gray-400 font-mono text-xs">{w.accountDetails}</td>
+                <td className="px-4 py-3">
+                  <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[w.status]}`}>
+                    {w.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">{fraudBadge(w.fraudScore)}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {new Date(w.requestedAt).toLocaleString()}
+                </td>
+                <td className="px-4 py-3">
+                  {(w.status === 'PENDING' || w.status === 'UNDER_REVIEW') && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmModal({ id: w.id, action: 'APPROVE' })}
+                        className="rounded bg-green-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-green-500"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => setConfirmModal({ id: w.id, action: 'REJECT' })}
+                        className="rounded bg-red-700 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-600"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Confirmation modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-gray-900 p-6">
+            <h2 className="mb-2 font-heading text-xl font-bold">
+              {confirmModal.action === 'APPROVE' ? '✅ Approve Withdrawal' : '❌ Reject Withdrawal'}
+            </h2>
+            <p className="mb-4 text-sm text-gray-400">
+              {confirmModal.action === 'APPROVE'
+                ? 'This will approve the withdrawal and initiate the payout.'
+                : 'This will reject the withdrawal and return funds to the user wallet.'}
+            </p>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Note (optional)"
+              className="mb-4 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+              rows={2}
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={handleAction}
+                className={`flex-1 rounded-lg py-2 text-sm font-bold ${
+                  confirmModal.action === 'APPROVE'
+                    ? 'bg-green-600 hover:bg-green-500'
+                    : 'bg-red-700 hover:bg-red-600'
+                } text-white`}
+              >
+                Confirm {confirmModal.action}
+              </button>
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="flex-1 rounded-lg border border-white/10 py-2 text-sm text-gray-400 hover:bg-white/10"
+              >
+                Cancel
+              </button>
             </div>
-          ))
-        )}
-      </div>
-
-      {total > 20 && (
-        <div className="flex justify-center gap-3">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-            className="admin-btn bg-dark-card border border-dark-border text-panda-white/60 disabled:opacity-30">
-            ← Prev
-          </button>
-          <span className="text-panda-white/40 font-heading text-sm self-center">Page {page}</span>
-          <button onClick={() => setPage((p) => p + 1)} disabled={page * 20 >= total}
-            className="admin-btn bg-dark-card border border-dark-border text-panda-white/60 disabled:opacity-30">
-            Next →
-          </button>
+          </div>
         </div>
       )}
     </div>

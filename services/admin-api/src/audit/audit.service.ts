@@ -30,7 +30,7 @@ export class AuditService {
       data: {
         actorId: dto.actorId,
         actorType: dto.actorType ?? 'ADMIN',
-        action: dto.action as string,
+        action: dto.action,
         resource: dto.resource,
         resourceId: dto.resourceId,
         before: dto.before as object,

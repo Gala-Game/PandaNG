@@ -20,10 +20,14 @@ export class StripeAdapter implements PaymentAdapter {
   private readonly baseUrl = 'https://api.stripe.com/v1';
   private readonly secretKey: string;
   private readonly webhookSecret: string;
+  private readonly mockEnabled: boolean;
 
   constructor(private readonly config: ConfigService) {
     this.secretKey = config.getOrThrow<string>('STRIPE_SECRET_KEY');
     this.webhookSecret = config.getOrThrow<string>('STRIPE_WEBHOOK_SECRET');
+    const mockFlag = config.get<string>('PAYMENTS_MOCK');
+    const nodeEnv = config.get<string>('NODE_ENV');
+    this.mockEnabled = mockFlag === 'true' || nodeEnv !== 'production';
   }
 
   async initiatePayment(params: PaymentInitiateParams): Promise<PaymentInitiateResult> {
@@ -73,6 +77,9 @@ export class StripeAdapter implements PaymentAdapter {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       this.logger.error('Stripe request failed', error);
+      if (!this.mockEnabled) {
+        throw new BadRequestException('Payment initiation failed');
+      }
       return {
         checkoutUrl: `https://sandbox.stripe.com/checkout/${params.reference}`,
         providerReference: `cs_mock_${params.reference}`,
@@ -80,7 +87,7 @@ export class StripeAdapter implements PaymentAdapter {
     }
   }
 
-  async verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
+  verifyWebhook(payload: Buffer, signature: string): Promise<WebhookVerifyResult> {
     // Stripe-Signature header: t=<timestamp>,v1=<hmac>
     const parts = Object.fromEntries(
       signature.split(',').map((part) => {
@@ -109,7 +116,12 @@ export class StripeAdapter implements PaymentAdapter {
 
     if (!isValid) {
       this.logger.warn('Stripe webhook signature mismatch');
-      return { isValid: false, providerReference: '', amountInCents: 0n, status: 'FAILED' };
+      return Promise.resolve({
+        isValid: false,
+        providerReference: '',
+        amountInCents: 0n,
+        status: 'FAILED',
+      });
     }
 
     const event = JSON.parse(payload.toString('utf8')) as {
@@ -128,6 +140,11 @@ export class StripeAdapter implements PaymentAdapter {
     const status: WebhookVerifyResult['status'] =
       obj.payment_status === 'paid' ? 'SUCCESS' : 'FAILED';
 
-    return { isValid: true, providerReference: obj.id, amountInCents, status };
+    return Promise.resolve({
+      isValid: true,
+      providerReference: obj.id,
+      amountInCents,
+      status,
+    });
   }
 }

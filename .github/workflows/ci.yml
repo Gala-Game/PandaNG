@@ -23,7 +23,9 @@ jobs:
           node-version: '${{ env.NODE_VERSION }}'
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run lint
+      - run: pnpm exec prisma generate
+      - run: pnpm run build --filter=@panda-ng/types --filter=@panda-ng/utils --filter=@panda-ng/config --filter=@panda-ng/game-sdk
+      - run: TURBO_CONCURRENCY=50% pnpm run lint
 
   type-check:
     name: Type Check
@@ -37,6 +39,7 @@ jobs:
           node-version: '${{ env.NODE_VERSION }}'
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
       - run: pnpm run type-check
 
   test:
@@ -74,6 +77,7 @@ jobs:
           node-version: '${{ env.NODE_VERSION }}'
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
       - run: pnpm run build --filter=@panda-ng/types --filter=@panda-ng/utils --filter=@panda-ng/config --filter=@panda-ng/game-sdk
       - run: pnpm run test
         env:

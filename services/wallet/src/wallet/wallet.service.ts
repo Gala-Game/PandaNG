@@ -15,7 +15,8 @@ import {
   getPaginationOffset,
 } from '@panda-ng/utils';
 import type { PaginatedResult } from '@panda-ng/utils';
-import type { WalletLedgerEntry, TransactionType } from '@prisma/client';
+import type { WalletLedgerEntry } from '@prisma/client';
+import { TransactionType } from '@prisma/client';
 
 @Injectable()
 export class WalletService {
@@ -42,7 +43,6 @@ export class WalletService {
       balanceInCents: wallet.balanceInCents.toString(),
       bonusBalanceInCents: wallet.bonusBalanceInCents.toString(),
       totalDepositedInCents: wallet.totalDepositedInCents.toString(),
-      totalWithdrawnInCents: wallet.totalWithdrawnInCents.toString(),
       totalWageredInCents: wallet.totalWageredInCents.toString(),
       totalWonInCents: wallet.totalWonInCents.toString(),
     };

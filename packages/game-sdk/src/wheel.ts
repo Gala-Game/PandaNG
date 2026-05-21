@@ -42,14 +42,14 @@ export function spinWheel(
   let cursor = 0;
   let segmentIndex = segments.length - 1;
   for (let i = 0; i < segments.length; i++) {
-    cursor += segments[i]!.weight;
+    cursor += segments[i].weight;
     if (threshold < cursor) {
       segmentIndex = i;
       break;
     }
   }
 
-  const segment = segments[segmentIndex]!;
+  const segment = segments[segmentIndex];
   const multiplierBps = BigInt(Math.floor(segment.multiplier * 100));
   const winAmountInCents = (betAmountInCents * multiplierBps) / 100n;
 
