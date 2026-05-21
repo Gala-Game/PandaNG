@@ -113,7 +113,7 @@ export async function startGameSession(
   betAmountInCents: number,
   clientSeed?: string,
 ): Promise<StartSessionResponse> {
-  const { data } = await gameClient.post<{ data: StartSessionResponse }>('/games/session/start', {
+  const { data } = await gameClient.post<{ data: StartSessionResponse }>('/games/start', {
     gameType,
     betAmountInCents,
     clientSeed,
@@ -122,15 +122,12 @@ export async function startGameSession(
 }
 
 export async function resolveWheel(sessionId: string) {
-  const { data } = await gameClient.post('/games/session/resolve/wheel', { sessionId });
+  const { data } = await gameClient.post(`/games/${sessionId}/resolve`, {});
   return data.data;
 }
 
-export async function resolveTreasure(sessionId: string, pickedIndices: number[]) {
-  const { data } = await gameClient.post('/games/session/resolve/treasure', {
-    sessionId,
-    pickedIndices,
-  });
+export async function resolveTreasure(sessionId: string, _pickedIndices: number[]) {
+  const { data } = await gameClient.post(`/games/${sessionId}/resolve`, {});
   return data.data;
 }
 

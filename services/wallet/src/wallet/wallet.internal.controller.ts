@@ -53,7 +53,7 @@ class InternalTransactionDto {
  * In production this is backed by a secret stored in INTERNAL_API_KEY env var.
  */
 @Injectable()
-class InternalApiKeyGuard implements CanActivate {
+export class InternalApiKeyGuard implements CanActivate {
   constructor(private readonly configService: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {

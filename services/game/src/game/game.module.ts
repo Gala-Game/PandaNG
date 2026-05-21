@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GameService } from './game.service';
 import { GameController } from './game.controller';
 import { GameGateway } from './game.gateway';
+import { JwtAuthGuard } from './guards/jwt.guard';
 
 @Module({
   imports: [
@@ -18,6 +19,6 @@ import { GameGateway } from './game.gateway';
     }),
   ],
   controllers: [GameController],
-  providers: [GameService, GameGateway],
+  providers: [GameService, GameGateway, JwtAuthGuard],
 })
 export class GameModule {}
