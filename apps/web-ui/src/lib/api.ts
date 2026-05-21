@@ -37,7 +37,12 @@ function createClient(baseURL: string) {
           }
         }
       }
-      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error) {
+        return Promise.reject(error);
+      }
+      const wrappedError = new Error(String(error));
+      (wrappedError as Error & { cause?: unknown }).cause = error;
+      return Promise.reject(wrappedError);
     },
   );
   return client;
