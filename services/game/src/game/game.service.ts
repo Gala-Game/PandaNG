@@ -162,7 +162,7 @@ export class GameService {
     const gameType = session.gameType as string;
 
     // Calculate outcome using game-sdk
-    let winInCents = 0n;
+    let winInCents: bigint;
     let result: unknown;
 
     if (gameType === 'SLOTS' || gameType === 'BAMBOO_BLAST') {
