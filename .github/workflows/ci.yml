@@ -99,6 +99,7 @@ jobs:
           node-version: '${{ env.NODE_VERSION }}'
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
       - run: pnpm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
