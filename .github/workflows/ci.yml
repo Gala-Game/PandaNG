@@ -84,6 +84,7 @@ jobs:
           DATABASE_URL: postgresql://pandang:password@localhost:5432/pandang_test
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-secret-key-for-ci
+          INTERNAL_API_KEY: test-internal-api-key-for-ci
           NODE_ENV: test
 
   build:
